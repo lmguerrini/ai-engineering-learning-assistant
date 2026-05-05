@@ -76,3 +76,81 @@ def get_weak_areas_summary(db_path: Path | None = None) -> dict[str, int]:
         return counts
     finally:
         conn.close()
+
+
+def get_user_profile_summary(db_path: Path | None = None) -> dict[str, Any]:
+    """Build a lightweight user profile from stored learning memory.
+
+    Returns a dict with:
+      - recent_topics: list of recently studied topic strings
+      - recurring_weak_areas: list of weak areas that appeared more than once
+      - average_score: average quiz score or None if no data
+      - preferred_style: None (reserved for future use)
+      - suggested_focus_topics: topics with below-average scores or recurring weak areas
+    """
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT topic, score, weak_areas FROM learning_events ORDER BY id DESC",
+        ).fetchall()
+
+        if not rows:
+            return {
+                "recent_topics": [],
+                "recurring_weak_areas": [],
+                "average_score": None,
+                "preferred_style": None,
+                "suggested_focus_topics": [],
+            }
+
+        # Recent topics (unique, preserving order, max 10)
+        seen: set[str] = set()
+        recent_topics: list[str] = []
+        for r in rows:
+            t = r["topic"]
+            if t not in seen:
+                seen.add(t)
+                recent_topics.append(t)
+            if len(recent_topics) >= 10:
+                break
+
+        # Weak-area counts
+        weak_counts: dict[str, int] = {}
+        for r in rows:
+            for area in json.loads(r["weak_areas"]):
+                weak_counts[area] = weak_counts.get(area, 0) + 1
+        recurring_weak_areas = [a for a, c in weak_counts.items() if c >= 2]
+
+        # Average score
+        scores = [r["score"] for r in rows]
+        average_score = round(sum(scores) / len(scores), 1) if scores else None
+
+        # Suggested focus topics: topics whose latest score is below average
+        suggested: list[str] = []
+        if average_score is not None:
+            topic_latest_score: dict[str, float] = {}
+            for r in rows:
+                t = r["topic"]
+                if t not in topic_latest_score:
+                    topic_latest_score[t] = r["score"]
+            suggested = [t for t, s in topic_latest_score.items() if s < average_score]
+
+        # Also add topics related to recurring weak areas if not already present
+        for area in recurring_weak_areas:
+            if area not in suggested:
+                suggested.append(area)
+
+        logger.debug(
+            "User profile: {} recent topics, {} recurring weak areas, avg={}, {} focus topics",
+            len(recent_topics), len(recurring_weak_areas), average_score, len(suggested),
+        )
+
+        return {
+            "recent_topics": recent_topics,
+            "recurring_weak_areas": recurring_weak_areas,
+            "average_score": average_score,
+            "preferred_style": None,
+            "suggested_focus_topics": suggested,
+        }
+    finally:
+        conn.close()
