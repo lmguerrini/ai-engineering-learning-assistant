@@ -3,6 +3,7 @@
 import streamlit as st
 
 from src.logging_config import setup_logging
+from src.services.observability import configure_langsmith_tracing
 from src.ui.pages import (
     render_advanced,
     render_intro,
@@ -12,6 +13,7 @@ from src.ui.pages import (
 )
 
 setup_logging()
+configure_langsmith_tracing()
 
 st.set_page_config(
     page_title="AI Engineering Learning Assistant",
