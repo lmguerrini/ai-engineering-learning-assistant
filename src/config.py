@@ -15,13 +15,11 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
 
-    # LangSmith
+    # LangSmith / LangChain tracing
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
     langchain_project: str = "ai-engineering-learning-assistant"
-    langsmith_tracing: bool = False
-    langsmith_api_key: str = ""
-    langsmith_project: str = "ai-engineering-learning-assistant"
+    langchain_endpoint: str = "https://api.smith.langchain.com"
 
     # App
     app_log_level: str = "DEBUG"

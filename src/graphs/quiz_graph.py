@@ -94,6 +94,7 @@ def run_quiz_generation(
     This is the main entry point for quiz generation.
     """
     try:
+        logger.info("[QuizGenGraph] Starting run — topic='{}', difficulty={}, questions={}", topic, difficulty.value, num_questions)
         app = build_quiz_generation_graph().compile()
         initial_state: QuizState = {
             "topic": topic,
@@ -103,9 +104,12 @@ def run_quiz_generation(
             "trace": [],
             "token_usage": {},
         }
-        return app.invoke(initial_state)
+        result = app.invoke(initial_state)
+        q_count = len(result.get("questions") or [])
+        logger.info("[QuizGenGraph] Run complete — topic='{}', questions_generated={}", topic, q_count)
+        return result
     except Exception as e:
-        logger.error("Quiz generation workflow failed: {}", e)
+        logger.error("[QuizGenGraph] Run failed — topic='{}', error={}", topic, e)
         return {
             "topic": topic,
             "difficulty": difficulty,
@@ -126,6 +130,7 @@ def run_quiz_evaluation(
     This is the main entry point for answer evaluation.
     """
     try:
+        logger.info("[QuizEvalGraph] Starting run — topic='{}', answers={}", topic, len(user_answers))
         app = build_quiz_evaluation_graph().compile()
         initial_state: QuizState = {
             "topic": topic,
@@ -134,9 +139,12 @@ def run_quiz_evaluation(
             "trace": [],
             "token_usage": {},
         }
-        return app.invoke(initial_state)
+        result = app.invoke(initial_state)
+        score = result.get("score", 0.0)
+        logger.info("[QuizEvalGraph] Run complete — topic='{}', score={}", topic, score)
+        return result
     except Exception as e:
-        logger.error("Quiz evaluation workflow failed: {}", e)
+        logger.error("[QuizEvalGraph] Run failed — topic='{}', error={}", topic, e)
         return {
             "topic": topic,
             "questions": questions,

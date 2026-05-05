@@ -598,6 +598,11 @@ def render_advanced() -> None:
         info = format_tracing_status(status)
         st.markdown(f"**Status:** {info['status_label']}")
         st.markdown(f"**Project:** {info['project']}")
+        st.markdown(f"**Endpoint:** {info['endpoint']}")
+        if info["has_api_key"]:
+            st.markdown("**API Key:** ✅ Configured")
+        elif any("API_KEY" in i for i in info.get("issues", [])):
+            st.warning("⚠️ LANGCHAIN_API_KEY is missing. Tracing will not work.")
         if info["issues"]:
             for issue in info["issues"]:
                 st.caption(f"ℹ️ {issue}")
@@ -610,8 +615,9 @@ def render_advanced() -> None:
         st.json({
             "default_model": settings.app_default_model,
             "log_level": settings.app_log_level,
-            "langsmith_tracing": settings.langchain_tracing_v2,
-            "langsmith_project": settings.langchain_project,
+            "langchain_tracing_v2": settings.langchain_tracing_v2,
+            "langchain_project": settings.langchain_project,
+            "langchain_endpoint": settings.langchain_endpoint,
             "embedding_model": settings.embedding_model,
             "chunk_size": settings.chunk_size,
             "chunk_overlap": settings.chunk_overlap,

@@ -84,6 +84,7 @@ def run_learn_workflow(
     Handles all exceptions gracefully and returns a state with error info.
     """
     try:
+        logger.info("[LearnGraph] Starting run — topic='{}', difficulty={}, style={}", topic, difficulty.value, style.value)
         app = compile_learn_graph()
         initial_state: LearningState = {
             "topic": topic,
@@ -93,9 +94,15 @@ def run_learn_workflow(
             "token_usage": {},
         }
         result = app.invoke(initial_state)
+        sources_count = len(result.get("retrieved_docs") or [])
+        fallback_used = not result.get("source_quality_ok", True)
+        logger.info(
+            "[LearnGraph] Run complete — topic='{}', sources={}, fallback={}",
+            topic, sources_count, fallback_used,
+        )
         return result
     except Exception as e:
-        logger.error("Learn workflow failed: {}", e)
+        logger.error("[LearnGraph] Run failed — topic='{}', error={}", topic, e)
         return {
             "topic": topic,
             "difficulty": difficulty,
