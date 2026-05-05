@@ -55,6 +55,7 @@ class QuizQuestion(BaseModel):
     options: list[str] = Field(default_factory=list, min_length=2)
     correct_answer: str = ""
     explanation: str = ""
+    concept: str = ""
 
 
 class QuizResult(BaseModel):
