@@ -252,7 +252,8 @@ def _build_fallback_guide(state: LearningState) -> StudyGuide:
     notes_parts = []
     for doc in docs[:5]:
         title = doc.metadata.get("topic", doc.metadata.get("filename", "source"))
-        sources.append(Source(title=title, content_snippet=doc.content[:200], relevance_score=0.5))
+        meta = {k: str(v) for k, v in doc.metadata.items() if k in ("filename", "source", "topic")}
+        sources.append(Source(title=title, content_snippet=doc.content[:200], relevance_score=0.5, metadata=meta))
         notes_parts.append(doc.content[:500])
 
     return StudyGuide(

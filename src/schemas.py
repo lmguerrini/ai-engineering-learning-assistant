@@ -35,6 +35,7 @@ class Source(BaseModel):
     title: str = ""
     content_snippet: str = ""
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class StudyGuide(BaseModel):
