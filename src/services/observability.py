@@ -16,6 +16,7 @@ class TracingStatus:
 
     enabled: bool = False
     project: str = ""
+    endpoint: str = ""
     has_api_key: bool = False
     issues: list[str] = field(default_factory=list)
 
@@ -32,9 +33,10 @@ def configure_langsmith_tracing() -> TracingStatus:
         logger.warning("Could not load settings for tracing: {}", exc)
         return TracingStatus(issues=[f"Settings unavailable: {exc}"])
 
-    status = TracingStatus(
-        project=settings.langchain_project or "ai-engineering-learning-assistant",
-    )
+    project = settings.langchain_project or "ai-engineering-learning-assistant"
+    endpoint = settings.langchain_endpoint or "https://api.smith.langchain.com"
+
+    status = TracingStatus(project=project, endpoint=endpoint)
 
     if not settings.langchain_tracing_v2:
         status.issues.append("LANGCHAIN_TRACING_V2 is not enabled.")
@@ -49,11 +51,12 @@ def configure_langsmith_tracing() -> TracingStatus:
     # Propagate to environment so LangChain/LangGraph picks them up
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
-    os.environ.setdefault("LANGCHAIN_PROJECT", status.project)
+    os.environ.setdefault("LANGCHAIN_PROJECT", project)
+    os.environ.setdefault("LANGCHAIN_ENDPOINT", endpoint)
 
     status.enabled = True
     status.has_api_key = True
-    logger.info("LangSmith tracing enabled for project '{}'.", status.project)
+    logger.info("LangSmith tracing enabled for project '{}' at {}.", project, endpoint)
     return status
 
 
@@ -68,6 +71,7 @@ def get_tracing_status() -> TracingStatus:
     return TracingStatus(
         enabled=enabled,
         project=settings.langchain_project or "ai-engineering-learning-assistant",
+        endpoint=settings.langchain_endpoint or "https://api.smith.langchain.com",
         has_api_key=bool(settings.langchain_api_key),
         issues=_collect_issues(settings),
     )
@@ -88,6 +92,7 @@ def format_tracing_status(status: TracingStatus) -> dict:
     return {
         "tracing_enabled": status.enabled,
         "project": status.project,
+        "endpoint": status.endpoint,
         "has_api_key": status.has_api_key,
         "issues": status.issues,
         "status_label": "✅ Active" if status.enabled else "❌ Disabled",

@@ -30,22 +30,35 @@ class TestTracingStatus:
         status = TracingStatus()
         assert status.enabled is False
         assert status.project == ""
+        assert status.endpoint == ""
         assert status.has_api_key is False
         assert status.issues == []
 
     def test_format_tracing_status_disabled(self):
-        status = TracingStatus(enabled=False, project="test-proj", issues=["Not enabled."])
+        status = TracingStatus(
+            enabled=False, project="test-proj", endpoint="https://api.smith.langchain.com",
+            issues=["Not enabled."],
+        )
         result = format_tracing_status(status)
         assert result["tracing_enabled"] is False
         assert result["status_label"] == "❌ Disabled"
         assert result["project"] == "test-proj"
+        assert result["endpoint"] == "https://api.smith.langchain.com"
         assert "Not enabled." in result["issues"]
 
     def test_format_tracing_status_enabled(self):
-        status = TracingStatus(enabled=True, project="prod", has_api_key=True)
+        status = TracingStatus(
+            enabled=True, project="prod", endpoint="https://custom.endpoint.com",
+            has_api_key=True,
+        )
         result = format_tracing_status(status)
         assert result["tracing_enabled"] is True
         assert result["status_label"] == "✅ Active"
+        assert result["endpoint"] == "https://custom.endpoint.com"
+
+    def test_format_includes_endpoint_key(self):
+        result = format_tracing_status(TracingStatus())
+        assert "endpoint" in result
 
 
 class TestConfigureLangsmithTracing:
@@ -55,6 +68,7 @@ class TestConfigureLangsmithTracing:
         settings.langchain_tracing_v2 = False
         settings.langchain_api_key = ""
         settings.langchain_project = "test"
+        settings.langchain_endpoint = "https://api.smith.langchain.com"
         mock_settings.return_value = settings
 
         status = configure_langsmith_tracing()
@@ -67,6 +81,7 @@ class TestConfigureLangsmithTracing:
         settings.langchain_tracing_v2 = True
         settings.langchain_api_key = ""
         settings.langchain_project = "test"
+        settings.langchain_endpoint = "https://api.smith.langchain.com"
         mock_settings.return_value = settings
 
         status = configure_langsmith_tracing()
@@ -79,17 +94,23 @@ class TestConfigureLangsmithTracing:
         settings.langchain_tracing_v2 = True
         settings.langchain_api_key = "ls-key-123"
         settings.langchain_project = "my-proj"
+        settings.langchain_endpoint = "https://custom.endpoint.com"
         mock_settings.return_value = settings
 
         # Clean env to avoid interference
-        env_backup = {k: os.environ.pop(k, None) for k in [
-            "LANGCHAIN_TRACING_V2", "LANGCHAIN_API_KEY", "LANGCHAIN_PROJECT",
-        ]}
+        env_keys = [
+            "LANGCHAIN_TRACING_V2", "LANGCHAIN_API_KEY",
+            "LANGCHAIN_PROJECT", "LANGCHAIN_ENDPOINT",
+        ]
+        env_backup = {k: os.environ.pop(k, None) for k in env_keys}
         try:
             status = configure_langsmith_tracing()
             assert status.enabled is True
             assert status.has_api_key is True
             assert status.project == "my-proj"
+            assert status.endpoint == "https://custom.endpoint.com"
+            # Verify env vars were propagated
+            assert os.environ.get("LANGCHAIN_ENDPOINT") == "https://custom.endpoint.com"
         finally:
             for k, v in env_backup.items():
                 if v is not None:
@@ -103,6 +124,19 @@ class TestConfigureLangsmithTracing:
         assert status.enabled is False
         assert any("unavailable" in i.lower() for i in status.issues)
 
+    @patch("src.services.observability.get_settings")
+    def test_default_endpoint_used_when_empty(self, mock_settings):
+        settings = MagicMock()
+        settings.langchain_tracing_v2 = False
+        settings.langchain_api_key = ""
+        settings.langchain_project = ""
+        settings.langchain_endpoint = ""
+        mock_settings.return_value = settings
+
+        status = configure_langsmith_tracing()
+        assert status.endpoint == "https://api.smith.langchain.com"
+        assert status.project == "ai-engineering-learning-assistant"
+
 
 class TestGetTracingStatus:
     @patch("src.services.observability.get_settings")
@@ -111,10 +145,26 @@ class TestGetTracingStatus:
         settings.langchain_tracing_v2 = False
         settings.langchain_api_key = ""
         settings.langchain_project = "test"
+        settings.langchain_endpoint = "https://api.smith.langchain.com"
         mock_settings.return_value = settings
 
         status = get_tracing_status()
         assert status.enabled is False
+        assert status.endpoint == "https://api.smith.langchain.com"
+
+    @patch("src.services.observability.get_settings")
+    def test_returns_enabled_with_key(self, mock_settings):
+        settings = MagicMock()
+        settings.langchain_tracing_v2 = True
+        settings.langchain_api_key = "ls-key"
+        settings.langchain_project = "proj"
+        settings.langchain_endpoint = "https://custom.endpoint.com"
+        mock_settings.return_value = settings
+
+        status = get_tracing_status()
+        assert status.enabled is True
+        assert status.has_api_key is True
+        assert status.endpoint == "https://custom.endpoint.com"
 
     @patch("src.services.observability.get_settings", side_effect=Exception("fail"))
     def test_graceful_on_settings_error(self, mock_settings):
