@@ -62,9 +62,13 @@ class TestLoadDocuments:
         assert docs == []
 
     def test_load_real_data(self):
-        """Verify the example documents in data/raw/ can be loaded."""
+        """Verify the knowledge base documents in data/raw/ can be loaded."""
         docs = load_documents(Path("data/raw"))
         assert len(docs) >= 2
         filenames = {d.metadata["filename"] for d in docs}
-        assert "ai_agents.md" in filenames
-        assert "langgraph_basics.md" in filenames
+        # Verify some known KB content files exist
+        assert "ai_agents_intro.md" in filenames
+        assert "rag_basics.md" in filenames
+        # Meta/eval files should NOT be in data/raw
+        assert "kb_index.md" not in filenames
+        assert "retrieval_eval_cases.md" not in filenames
