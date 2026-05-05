@@ -3,6 +3,7 @@
 import streamlit as st
 
 from src.schemas import DifficultyLevel, QuizQuestion, ResponseStyle, StudyGuide
+from src.demo.review_examples import get_demo_by_title, get_demo_titles
 from src.ui.display_helpers import (
     format_error_message,
     format_graph_state_summary,
@@ -199,9 +200,33 @@ def render_learn() -> None:
         "Agentic RAG."
     )
 
+    # Demo examples selector
+    with st.expander("💡 Try a demo example"):
+        demo_titles = get_demo_titles()
+        selected_demo = st.selectbox(
+            "Demo topic", [""] + demo_titles, key="demo_select",
+        )
+        if selected_demo:
+            demo = get_demo_by_title(selected_demo)
+            if demo:
+                st.caption(demo.description)
+                st.caption(f"Features: {', '.join(demo.features_exercised)}")
+                if st.button("Use this demo topic", key="btn_use_demo"):
+                    st.session_state["learn_topic_custom"] = demo.topic
+                    st.session_state["learn_difficulty_demo"] = demo.difficulty
+                    st.session_state["learn_style_demo"] = demo.response_style
+
+    # Use demo topic if set, else manual selection
+    demo_topic = st.session_state.pop("learn_topic_custom", None)
+    demo_diff = st.session_state.pop("learn_difficulty_demo", None)
+    demo_style = st.session_state.pop("learn_style_demo", None)
+
     col1, col2, col3 = st.columns(3)
     with col1:
-        topic = st.selectbox("Topic", LEARN_TOPICS, key="learn_topic")
+        if demo_topic:
+            topic = st.text_input("Topic", value=demo_topic, key="learn_topic_input")
+        else:
+            topic = st.selectbox("Topic", LEARN_TOPICS, key="learn_topic")
     with col2:
         difficulty = st.selectbox(
             "Difficulty",
