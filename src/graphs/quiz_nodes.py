@@ -12,6 +12,7 @@ from openai import OpenAI
 from src.config import get_settings
 from src.graphs.quiz_state import QuizState
 from src.schemas import DifficultyLevel, QuizQuestion, QuizResult
+from src.services.cache import build_cache_key, get_cached_value, set_cached_value
 from src.services.cost_tracker import build_usage_record
 from src.services.retry import with_retry
 
@@ -62,7 +63,7 @@ def load_topic_context(state: QuizState) -> dict:
 # ---------------------------------------------------------------------------
 
 def load_user_memory(state: QuizState) -> dict:
-    """Load user memory profile from the learning memory service."""
+    """Load user memory profile and feedback summary."""
     trace = list(state.get("trace", []))
     trace.append("load_user_memory: started")
 
@@ -79,6 +80,16 @@ def load_user_memory(state: QuizState) -> dict:
             "preferred_style": None,
             "suggested_focus_topics": [],
         }
+
+    # Attach feedback suggestion to profile for downstream use
+    try:
+        from src.memory.feedback_service import get_feedback_summary
+
+        fb = get_feedback_summary()
+        if fb.get("suggestion"):
+            profile["feedback_suggestion"] = fb["suggestion"]
+    except Exception:
+        pass
 
     has_data = bool(profile.get("recent_topics"))
     trace.append(
@@ -109,6 +120,12 @@ def _build_quiz_memory_context(state: QuizState) -> str:
             parts.append("The learner's average score is low — include more foundational questions.")
         elif avg >= 80:
             parts.append("The learner's average score is high — include slightly more challenging questions.")
+
+    fb_suggestion = profile.get("feedback_suggestion")
+    if fb_suggestion == "simplify":
+        parts.append("User feedback indicates questions should be simpler and clearer.")
+    elif fb_suggestion == "increase_difficulty":
+        parts.append("User feedback indicates questions could be more challenging.")
 
     return "\n".join(parts)
 
@@ -181,11 +198,34 @@ def _parse_quiz_response(raw: str) -> list[QuizQuestion]:
     return [QuizQuestion(**q) for q in questions_data]
 
 
+def _build_quiz_cache_key(state: QuizState) -> str:
+    """Build a cache key for quiz generation based on inputs + memory hash."""
+    profile = state.get("memory_profile", {})
+    payload = {
+        "topic": state.get("topic", ""),
+        "difficulty": str(state.get("difficulty", "")),
+        "num_questions": state.get("num_questions", _DEFAULT_NUM_QUESTIONS),
+        "memory_hash": str(sorted(profile.items())) if profile else "",
+    }
+    return build_cache_key("quiz", payload)
+
+
 def generate_quiz(state: QuizState) -> dict:
     """Generate quiz questions using the LLM."""
     trace = list(state.get("trace", []))
     trace.append("generate_quiz: started")
     token_usage = dict(state.get("token_usage", {}))
+
+    # --- Check cache ---
+    cache_key = _build_quiz_cache_key(state)
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        try:
+            questions = [QuizQuestion(**q) for q in cached]
+            trace.append("generate_quiz: cache hit")
+            return {"questions": questions, "trace": trace, "token_usage": token_usage}
+        except Exception:
+            pass  # invalid cache entry — continue to LLM
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -231,6 +271,14 @@ def generate_quiz(state: QuizState) -> dict:
         trace.append(f"generate_quiz: LLM returned {len(raw)} chars")
         questions = _parse_quiz_response(raw)
         trace.append(f"generate_quiz: parsed {len(questions)} questions")
+
+        # Cache the result
+        try:
+            set_cached_value(cache_key, [q.model_dump() for q in questions], ttl_seconds=3600)
+            trace.append("generate_quiz: cached")
+        except Exception:
+            pass
+
         return {"questions": questions, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except json.JSONDecodeError as e:

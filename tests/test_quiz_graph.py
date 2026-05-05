@@ -114,9 +114,11 @@ class TestLoadUserMemory:
 # generate_quiz
 # ===================================================================
 
+@patch("src.graphs.quiz_nodes.get_cached_value", return_value=None)
+@patch("src.graphs.quiz_nodes.set_cached_value")
 class TestGenerateQuiz:
     @patch("src.graphs.quiz_nodes.get_settings")
-    def test_fallback_when_no_api_key(self, mock_settings):
+    def test_fallback_when_no_api_key(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="")
         state = {"topic": "AI Agents", "trace": [], "token_usage": {}}
         result = generate_quiz(state)
@@ -125,7 +127,7 @@ class TestGenerateQuiz:
 
     @patch("src.graphs.quiz_nodes.get_settings")
     @patch("src.graphs.quiz_nodes.OpenAI")
-    def test_successful_generation(self, mock_openai_cls, mock_settings):
+    def test_successful_generation(self, mock_openai_cls, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="sk-test", app_default_model="gpt-4o-mini")
         questions_data = {
             "questions": [
@@ -150,7 +152,7 @@ class TestGenerateQuiz:
 
     @patch("src.graphs.quiz_nodes.get_settings")
     @patch("src.graphs.quiz_nodes.OpenAI")
-    def test_malformed_json_fallback(self, mock_openai_cls, mock_settings):
+    def test_malformed_json_fallback(self, mock_openai_cls, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="sk-test", app_default_model="gpt-4o-mini")
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=MagicMock(content="not valid json {{{"))]
@@ -164,7 +166,7 @@ class TestGenerateQuiz:
 
     @patch("src.graphs.quiz_nodes.get_settings")
     @patch("src.graphs.quiz_nodes.OpenAI")
-    def test_llm_exception_fallback(self, mock_openai_cls, mock_settings):
+    def test_llm_exception_fallback(self, mock_openai_cls, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="sk-test", app_default_model="gpt-4o-mini")
         mock_openai_cls.return_value.chat.completions.create.side_effect = RuntimeError("API down")
 

@@ -146,9 +146,11 @@ class TestRefineQueryIfNeeded:
         assert "retrieved_docs" not in result
 
 
+@patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
+@patch("src.graphs.learn_nodes.set_cached_value")
 class TestGenerateStudyGuide:
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_fallback_when_no_api_key(self, mock_settings):
+    def test_fallback_when_no_api_key(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="")
         docs = _make_docs(3)
         state = _base_state(retrieved_docs=docs)
@@ -159,7 +161,7 @@ class TestGenerateStudyGuide:
         assert any("no API key" in t for t in result["trace"])
 
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_fallback_on_llm_error(self, mock_settings):
+    def test_fallback_on_llm_error(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(
             openai_api_key="sk-test",
             app_default_model="gpt-4o-mini",
@@ -173,7 +175,7 @@ class TestGenerateStudyGuide:
         assert any("error" in t.lower() or "fallback" in t.lower() for t in result["trace"])
 
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_successful_llm_call(self, mock_settings):
+    def test_successful_llm_call(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(
             openai_api_key="sk-test",
             app_default_model="gpt-4o-mini",
@@ -203,7 +205,7 @@ class TestGenerateStudyGuide:
         assert result["token_usage"]["total_tokens"] == 150
 
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_malformed_json_fallback(self, mock_settings):
+    def test_malformed_json_fallback(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(
             openai_api_key="sk-test",
             app_default_model="gpt-4o-mini",

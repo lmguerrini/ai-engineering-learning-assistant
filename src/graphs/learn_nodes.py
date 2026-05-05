@@ -14,6 +14,7 @@ from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
 from src.kb.retrieval import retrieve_documents
 from src.schemas import DifficultyLevel, ResponseStyle, Source, StudyGuide
+from src.services.cache import build_cache_key, get_cached_value, set_cached_value
 from src.services.cost_tracker import build_usage_record
 from src.services.retry import with_retry
 
@@ -57,7 +58,7 @@ def validate_input(state: LearningState) -> dict:
 # ---------------------------------------------------------------------------
 
 def load_user_memory(state: LearningState) -> dict:
-    """Load user memory profile from the learning memory service."""
+    """Load user memory profile and feedback summary."""
     trace = list(state.get("trace", []))
     trace.append("load_user_memory: started")
 
@@ -74,6 +75,16 @@ def load_user_memory(state: LearningState) -> dict:
             "preferred_style": None,
             "suggested_focus_topics": [],
         }
+
+    # Attach feedback suggestion to profile for downstream use
+    try:
+        from src.memory.feedback_service import get_feedback_summary
+
+        fb = get_feedback_summary()
+        if fb.get("suggestion"):
+            profile["feedback_suggestion"] = fb["suggestion"]
+    except Exception:
+        pass
 
     has_data = bool(profile.get("recent_topics"))
     trace.append(
@@ -168,6 +179,12 @@ def _build_memory_context(state: LearningState) -> str:
         elif avg >= 80:
             parts.append("The learner's average score is high — include more advanced nuances.")
 
+    fb_suggestion = profile.get("feedback_suggestion")
+    if fb_suggestion == "simplify":
+        parts.append("User feedback indicates content should be simpler and clearer.")
+    elif fb_suggestion == "increase_difficulty":
+        parts.append("User feedback indicates content could be more challenging.")
+
     return "\n".join(parts)
 
 
@@ -248,11 +265,34 @@ def _build_fallback_guide(state: LearningState) -> StudyGuide:
     )
 
 
+def _build_learn_cache_key(state: LearningState) -> str:
+    """Build a cache key for the study guide based on inputs + memory hash."""
+    profile = state.get("memory_profile", {})
+    payload = {
+        "topic": state.get("topic", ""),
+        "difficulty": str(state.get("difficulty", "")),
+        "style": str(state.get("style", "")),
+        "memory_hash": str(sorted(profile.items())) if profile else "",
+    }
+    return build_cache_key("learn_guide", payload)
+
+
 def generate_study_guide(state: LearningState) -> dict:
     """Generate a structured study guide using the LLM."""
     trace = list(state.get("trace", []))
     trace.append("generate_study_guide: started")
     token_usage = dict(state.get("token_usage", {}))
+
+    # --- Check cache ---
+    cache_key = _build_learn_cache_key(state)
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        try:
+            guide = StudyGuide(**cached)
+            trace.append("generate_study_guide: cache hit")
+            return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+        except Exception:
+            pass  # invalid cache entry — continue to LLM
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -299,6 +339,14 @@ def generate_study_guide(state: LearningState) -> dict:
 
         guide = _parse_study_guide(raw, state)
         trace.append("generate_study_guide: parsed successfully")
+
+        # Cache the result
+        try:
+            set_cached_value(cache_key, guide.model_dump(), ttl_seconds=3600)
+            trace.append("generate_study_guide: cached")
+        except Exception:
+            pass
+
         return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except json.JSONDecodeError as e:
