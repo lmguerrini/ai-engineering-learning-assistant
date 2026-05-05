@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.graphs.quiz_nodes import (
-    create_memory_candidate_placeholder,
+    create_memory_candidate,
     evaluate_answers,
     extract_weak_areas,
     generate_quiz,
@@ -354,14 +354,17 @@ class TestExtractWeakAreas:
 
 
 # ===================================================================
-# Placeholder nodes
+# Memory candidate + return_results
 # ===================================================================
 
-class TestPlaceholderNodes:
-    def test_create_memory_candidate_placeholder(self):
-        state = {"trace": []}
-        result = create_memory_candidate_placeholder(state)
-        assert any("placeholder" in t for t in result["trace"])
+class TestMemoryCandidateNode:
+    def test_creates_candidate(self):
+        state = {"topic": "AI Agents", "score": 75.0, "weak_areas": ["planning"], "trace": []}
+        result = create_memory_candidate(state)
+        candidate = result["memory_candidate"]
+        assert candidate["topic"] == "AI Agents"
+        assert candidate["score"] == 75.0
+        assert candidate["weak_areas"] == ["planning"]
 
     def test_return_results(self):
         state = {"trace": []}
