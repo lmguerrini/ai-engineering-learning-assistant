@@ -58,19 +58,60 @@ def load_topic_context(state: QuizState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Node: load_user_memory_placeholder
+# Node: load_user_memory
 # ---------------------------------------------------------------------------
 
-def load_user_memory_placeholder(state: QuizState) -> dict:
-    """Placeholder for loading user memory (implemented in Phase 5)."""
+def load_user_memory(state: QuizState) -> dict:
+    """Load user memory profile from the learning memory service."""
     trace = list(state.get("trace", []))
-    trace.append("load_user_memory_placeholder: no memory loaded (placeholder)")
-    return {"user_memory": {}, "trace": trace}
+    trace.append("load_user_memory: started")
+
+    try:
+        from src.memory.memory_service import get_user_profile_summary as _get_profile
+
+        profile = _get_profile()
+    except Exception as e:
+        logger.warning("Failed to load memory profile: {}", e)
+        profile = {
+            "recent_topics": [],
+            "recurring_weak_areas": [],
+            "average_score": None,
+            "preferred_style": None,
+            "suggested_focus_topics": [],
+        }
+
+    has_data = bool(profile.get("recent_topics"))
+    trace.append(
+        f"load_user_memory: {'profile loaded' if has_data else 'no memory data'}"
+    )
+    return {"user_memory": profile, "memory_profile": profile, "trace": trace}
 
 
 # ---------------------------------------------------------------------------
 # Node: generate_quiz
 # ---------------------------------------------------------------------------
+
+def _build_quiz_memory_context(state: QuizState) -> str:
+    """Build personalization context from memory profile for quiz generation."""
+    profile = state.get("memory_profile", {})
+    if not profile or not profile.get("recent_topics"):
+        return ""
+
+    parts: list[str] = []
+    weak = profile.get("recurring_weak_areas", [])
+    if weak:
+        parts.append(f"The learner has recurring weak areas in: {', '.join(weak[:5])}.")
+        parts.append("Bias some questions toward these concepts to help reinforce them.")
+
+    avg = profile.get("average_score")
+    if avg is not None:
+        if avg < 50:
+            parts.append("The learner's average score is low — include more foundational questions.")
+        elif avg >= 80:
+            parts.append("The learner's average score is high — include slightly more challenging questions.")
+
+    return "\n".join(parts)
+
 
 def _build_quiz_prompt(state: QuizState) -> str:
     """Build the LLM prompt for quiz generation."""
@@ -79,11 +120,17 @@ def _build_quiz_prompt(state: QuizState) -> str:
     num_q = state.get("num_questions", _DEFAULT_NUM_QUESTIONS)
     context = state.get("study_guide_context", "")
 
+    memory_context = _build_quiz_memory_context(state)
+    personalization = ""
+    if memory_context:
+        personalization = f"\nPersonalization context:\n{memory_context}\n"
+
     return (
         f"You are an AI Engineering quiz generator.\n\n"
         f"Generate a multiple-choice quiz on the topic '{topic}' "
         f"at {difficulty.value} level.\n\n"
-        f"Context:\n{context}\n\n"
+        f"Context:\n{context}\n"
+        f"{personalization}\n"
         f"Requirements:\n"
         f"- Generate exactly {num_q} questions.\n"
         f"- Each question must have exactly 4 options (A, B, C, D).\n"
@@ -293,6 +340,37 @@ def evaluate_answers(state: QuizState) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Helper: build suggested topics
+# ---------------------------------------------------------------------------
+
+def _build_suggested_topics(weak_areas: list[str], state: QuizState) -> list[str]:
+    """Build suggested next topics from weak areas and memory profile."""
+    seen: set[str] = set()
+    suggested: list[str] = []
+
+    # Add weak areas from this quiz
+    for area in weak_areas:
+        if area not in seen:
+            seen.add(area)
+            suggested.append(area)
+
+    # Add focus topics from memory profile
+    profile = state.get("memory_profile", {})
+    for topic in profile.get("suggested_focus_topics", []):
+        if topic not in seen:
+            seen.add(topic)
+            suggested.append(topic)
+
+    # Add recurring weak areas from memory
+    for area in profile.get("recurring_weak_areas", []):
+        if area not in seen:
+            seen.add(area)
+            suggested.append(area)
+
+    return suggested[:10]
+
+
+# ---------------------------------------------------------------------------
 # Node: extract_weak_areas
 # ---------------------------------------------------------------------------
 
@@ -323,15 +401,19 @@ def extract_weak_areas(state: QuizState) -> dict:
         next_steps.append("Study the topic again using the Learn section.")
         next_steps.append("Focus on understanding the core concepts before retaking the quiz.")
 
+    # Build suggested topics from weak areas + memory profile
+    suggested_topics = _build_suggested_topics(weak_areas, state)
+
     # Update quiz_result with weak areas
     quiz_result = state.get("quiz_result")
     if quiz_result is not None:
         quiz_result = quiz_result.model_copy(update={"weak_areas": weak_areas})
 
-    trace.append(f"extract_weak_areas: {len(weak_areas)} weak areas found")
+    trace.append(f"extract_weak_areas: {len(weak_areas)} weak areas, {len(suggested_topics)} suggested topics")
     return {
         "weak_areas": weak_areas,
         "suggested_next_steps": next_steps,
+        "suggested_topics": suggested_topics,
         "quiz_result": quiz_result,
         "trace": trace,
     }

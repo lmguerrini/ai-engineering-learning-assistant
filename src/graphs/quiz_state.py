@@ -17,8 +17,9 @@ class QuizState(TypedDict, total=False):
     num_questions: int
     study_guide_context: str
 
-    # --- Memory (placeholder) ---
+    # --- Memory ---
     user_memory: dict[str, Any]
+    memory_profile: dict[str, Any]
 
     # --- Generation ---
     questions: list[QuizQuestion]
@@ -36,6 +37,9 @@ class QuizState(TypedDict, total=False):
 
     # --- Memory candidate (HITL — not persisted inside graph) ---
     memory_candidate: dict[str, Any] | None
+
+    # --- Suggested topics ---
+    suggested_topics: list[str]
 
     # --- Output / control ---
     error: str | None

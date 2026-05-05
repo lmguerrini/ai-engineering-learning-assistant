@@ -6,12 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.graphs.quiz_nodes import (
+    _build_suggested_topics,
     create_memory_candidate,
     evaluate_answers,
     extract_weak_areas,
     generate_quiz,
     load_topic_context,
-    load_user_memory_placeholder,
+    load_user_memory,
     return_results,
     validate_quiz,
 )
@@ -83,15 +84,30 @@ class TestLoadTopicContext:
 
 
 # ===================================================================
-# load_user_memory_placeholder
+# load_user_memory
 # ===================================================================
 
-class TestLoadUserMemoryPlaceholder:
-    def test_returns_empty_memory(self):
+class TestLoadUserMemory:
+    @patch("src.memory.memory_service.get_user_profile_summary")
+    def test_loads_profile(self, mock_profile):
+        mock_profile.return_value = {
+            "recent_topics": ["RAG"],
+            "recurring_weak_areas": ["embeddings"],
+            "average_score": 65.0,
+            "preferred_style": None,
+            "suggested_focus_topics": ["embeddings"],
+        }
         state = {"trace": []}
-        result = load_user_memory_placeholder(state)
-        assert result["user_memory"] == {}
-        assert any("placeholder" in t for t in result["trace"])
+        result = load_user_memory(state)
+        assert result["memory_profile"]["recent_topics"] == ["RAG"]
+        assert any("profile loaded" in t for t in result["trace"])
+
+    @patch("src.memory.memory_service.get_user_profile_summary", side_effect=Exception("DB error"))
+    def test_fallback_on_error(self, mock_profile):
+        state = {"trace": []}
+        result = load_user_memory(state)
+        assert result["memory_profile"]["recent_topics"] == []
+        assert any("no memory data" in t for t in result["trace"])
 
 
 # ===================================================================

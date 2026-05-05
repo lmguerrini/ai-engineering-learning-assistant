@@ -18,7 +18,7 @@ from src.graphs.quiz_nodes import (
     extract_weak_areas,
     generate_quiz,
     load_topic_context,
-    load_user_memory_placeholder,
+    load_user_memory,
     return_results,
     validate_quiz,
 )
@@ -30,7 +30,7 @@ def _route_after_topic_context(state: QuizState) -> str:
     """Route to END if topic loading failed, otherwise continue."""
     if state.get("error"):
         return "return_results"
-    return "load_user_memory_placeholder"
+    return "load_user_memory"
 
 
 # ---------------------------------------------------------------------------
@@ -42,14 +42,14 @@ def build_quiz_generation_graph() -> StateGraph:
     graph = StateGraph(QuizState)
 
     graph.add_node("load_topic_context", load_topic_context)
-    graph.add_node("load_user_memory_placeholder", load_user_memory_placeholder)
+    graph.add_node("load_user_memory", load_user_memory)
     graph.add_node("generate_quiz", generate_quiz)
     graph.add_node("validate_quiz", validate_quiz)
     graph.add_node("return_results", return_results)
 
     graph.add_edge(START, "load_topic_context")
     graph.add_conditional_edges("load_topic_context", _route_after_topic_context)
-    graph.add_edge("load_user_memory_placeholder", "generate_quiz")
+    graph.add_edge("load_user_memory", "generate_quiz")
     graph.add_edge("generate_quiz", "validate_quiz")
     graph.add_edge("validate_quiz", "return_results")
     graph.add_edge("return_results", END)
