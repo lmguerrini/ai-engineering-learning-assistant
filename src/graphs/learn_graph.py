@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from src.graphs.learn_nodes import (
     assess_source_quality,
     generate_study_guide,
-    load_memory_placeholder,
+    load_user_memory,
     persist_learning_event_placeholder,
     quality_check,
     refine_query_if_needed,
@@ -28,7 +28,7 @@ def _route_after_validation(state: LearningState) -> str:
     """Route to END if validation failed, otherwise continue."""
     if state.get("error"):
         return "return_output"
-    return "load_memory_placeholder"
+    return "load_user_memory"
 
 
 def _route_after_assessment(state: LearningState) -> str:
@@ -45,7 +45,7 @@ def build_learn_graph() -> StateGraph:
     graph = StateGraph(LearningState)
 
     graph.add_node("validate_input", validate_input)
-    graph.add_node("load_memory_placeholder", load_memory_placeholder)
+    graph.add_node("load_user_memory", load_user_memory)
     graph.add_node("retrieve_sources", retrieve_sources)
     graph.add_node("assess_source_quality", assess_source_quality)
     graph.add_node("refine_query_if_needed", refine_query_if_needed)
@@ -56,7 +56,7 @@ def build_learn_graph() -> StateGraph:
 
     graph.add_edge(START, "validate_input")
     graph.add_conditional_edges("validate_input", _route_after_validation)
-    graph.add_edge("load_memory_placeholder", "retrieve_sources")
+    graph.add_edge("load_user_memory", "retrieve_sources")
     graph.add_edge("retrieve_sources", "assess_source_quality")
     graph.add_conditional_edges("assess_source_quality", _route_after_assessment)
     graph.add_edge("refine_query_if_needed", "retrieve_sources")

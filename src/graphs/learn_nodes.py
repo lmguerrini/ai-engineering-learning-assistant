@@ -53,14 +53,33 @@ def validate_input(state: LearningState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Node: load_memory_placeholder
+# Node: load_user_memory
 # ---------------------------------------------------------------------------
 
-def load_memory_placeholder(state: LearningState) -> dict:
-    """Placeholder for loading user memory (implemented in Phase 5)."""
+def load_user_memory(state: LearningState) -> dict:
+    """Load user memory profile from the learning memory service."""
     trace = list(state.get("trace", []))
-    trace.append("load_memory_placeholder: no memory loaded (placeholder)")
-    return {"user_memory": {}, "trace": trace}
+    trace.append("load_user_memory: started")
+
+    try:
+        from src.memory.memory_service import get_user_profile_summary as _get_profile
+
+        profile = _get_profile()
+    except Exception as e:
+        logger.warning("Failed to load memory profile: {}", e)
+        profile = {
+            "recent_topics": [],
+            "recurring_weak_areas": [],
+            "average_score": None,
+            "preferred_style": None,
+            "suggested_focus_topics": [],
+        }
+
+    has_data = bool(profile.get("recent_topics"))
+    trace.append(
+        f"load_user_memory: {'profile loaded' if has_data else 'no memory data'}"
+    )
+    return {"user_memory": profile, "memory_profile": profile, "trace": trace}
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +144,33 @@ def refine_query_if_needed(state: LearningState) -> dict:
 # Node: generate_study_guide
 # ---------------------------------------------------------------------------
 
+def _build_memory_context(state: LearningState) -> str:
+    """Build personalization context from memory profile if available."""
+    profile = state.get("memory_profile", {})
+    if not profile or not profile.get("recent_topics"):
+        return ""
+
+    parts: list[str] = []
+    weak = profile.get("recurring_weak_areas", [])
+    if weak:
+        parts.append(f"The learner has recurring weak areas in: {', '.join(weak[:5])}.")
+        parts.append("Emphasize these concepts if they relate to the current topic.")
+
+    recent = profile.get("recent_topics", [])
+    if recent:
+        parts.append(f"Recently studied topics: {', '.join(recent[:5])}.")
+        parts.append("Mention useful connections to these topics where appropriate.")
+
+    avg = profile.get("average_score")
+    if avg is not None:
+        if avg < 50:
+            parts.append("The learner's average score is low — use simpler language and more foundational explanations.")
+        elif avg >= 80:
+            parts.append("The learner's average score is high — include more advanced nuances.")
+
+    return "\n".join(parts)
+
+
 def _build_prompt(state: LearningState) -> str:
     """Build the LLM prompt for study guide generation."""
     topic = state.get("topic", "")
@@ -143,10 +189,16 @@ def _build_prompt(state: LearningState) -> str:
         ResponseStyle.EXAMPLES_HEAVY: "Use many practical examples.",
     }.get(style, "Be thorough and detailed.")
 
+    memory_context = _build_memory_context(state)
+    personalization = ""
+    if memory_context:
+        personalization = f"\nPersonalization context:\n{memory_context}\n"
+
     return (
         f"You are an AI Engineering tutor. Generate a structured study guide "
         f"on the topic '{topic}' at {difficulty.value} level.\n\n"
-        f"Style: {style_instruction}\n\n"
+        f"Style: {style_instruction}\n"
+        f"{personalization}\n"
         f"Use ONLY the following sources to build the guide. "
         f"Do not invent information beyond what is in the sources.\n"
         f"{sources_text}\n\n"

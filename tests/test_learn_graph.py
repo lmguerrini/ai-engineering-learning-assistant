@@ -9,9 +9,10 @@ from src.graphs.learn_nodes import (
     _MIN_CONTENT_CHARS,
     _MIN_SOURCES,
     _build_fallback_guide,
+    _build_memory_context,
     assess_source_quality,
     generate_study_guide,
-    load_memory_placeholder,
+    load_user_memory,
     persist_learning_event_placeholder,
     quality_check,
     refine_query_if_needed,
@@ -79,11 +80,25 @@ class TestValidateInput:
         assert result["style"] == ResponseStyle.DETAILED
 
 
-class TestLoadMemoryPlaceholder:
-    def test_returns_empty_memory(self):
-        result = load_memory_placeholder(_base_state())
-        assert result["user_memory"] == {}
-        assert any("placeholder" in t for t in result["trace"])
+class TestLoadUserMemory:
+    @patch("src.memory.memory_service.get_user_profile_summary")
+    def test_loads_profile(self, mock_profile):
+        mock_profile.return_value = {
+            "recent_topics": ["RAG"],
+            "recurring_weak_areas": ["embeddings"],
+            "average_score": 65.0,
+            "preferred_style": None,
+            "suggested_focus_topics": ["embeddings"],
+        }
+        result = load_user_memory(_base_state())
+        assert result["memory_profile"]["recent_topics"] == ["RAG"]
+        assert any("profile loaded" in t for t in result["trace"])
+
+    @patch("src.memory.memory_service.get_user_profile_summary", side_effect=Exception("DB error"))
+    def test_fallback_on_error(self, mock_profile):
+        result = load_user_memory(_base_state())
+        assert result["memory_profile"]["recent_topics"] == []
+        assert any("no memory data" in t for t in result["trace"])
 
 
 class TestRetrieveSources:
@@ -256,7 +271,7 @@ class TestLearnGraph:
         node_names = set(graph.nodes.keys())
         expected = {
             "validate_input",
-            "load_memory_placeholder",
+            "load_user_memory",
             "retrieve_sources",
             "assess_source_quality",
             "refine_query_if_needed",

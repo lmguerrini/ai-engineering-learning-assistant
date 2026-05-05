@@ -17,8 +17,9 @@ class LearningState(TypedDict, total=False):
     difficulty: DifficultyLevel
     style: ResponseStyle
 
-    # --- Memory (placeholder) ---
+    # --- Memory ---
     user_memory: dict[str, Any]
+    memory_profile: dict[str, Any]
 
     # --- Retrieval ---
     query: str
