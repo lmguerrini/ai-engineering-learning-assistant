@@ -41,3 +41,4 @@ class QuizState(TypedDict, total=False):
     error: str | None
     trace: list[str]
     token_usage: dict[str, int]
+    usage_records: list[dict[str, Any]]

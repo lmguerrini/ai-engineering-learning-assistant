@@ -121,9 +121,10 @@ def render_learn() -> None:
             else:
                 st.warning("No study guide was generated. Try a different topic.")
 
-        # Store trace and token usage for debug view
+        # Store trace, token usage, and cost records for debug view
         st.session_state["last_learn_trace"] = result.get("trace", [])
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
+        _accumulate_usage_records(result.get("usage_records", []))
 
         # Show debug trace inline when requested
         with st.expander("🔍 Debug Trace"):
@@ -245,6 +246,7 @@ def render_quiz() -> None:
 
         st.session_state["last_quiz_trace"] = result.get("trace", [])
         st.session_state["last_quiz_tokens"] = result.get("token_usage", {})
+        _accumulate_usage_records(result.get("usage_records", []))
 
     # Display questions if available
     questions = st.session_state.get("quiz_questions", [])
@@ -358,6 +360,40 @@ def render_progress() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Cost tracking helpers
+# ---------------------------------------------------------------------------
+
+
+def _accumulate_usage_records(records: list[dict]) -> None:
+    """Append new usage records to session-level accumulator."""
+    existing = st.session_state.get("session_usage_records", [])
+    st.session_state["session_usage_records"] = existing + records
+
+
+def _display_session_cost_summary() -> None:
+    """Display aggregated token/cost data for the current session."""
+    records = st.session_state.get("session_usage_records", [])
+    if not records:
+        st.info("No usage data yet. Generate a study guide or quiz to see cost estimates.")
+        return
+
+    from src.services.cost_tracker import aggregate_usage
+
+    summary = aggregate_usage(records)
+    st.metric("Total Tokens", f"{summary['total_tokens']:,}")
+    st.metric("Estimated Cost", f"${summary['estimated_cost_usd']:.6f}")
+
+    st.markdown("**Breakdown by operation:**")
+    for op in summary["operations"]:
+        st.markdown(
+            f"- **{op['operation']}** — {op['total_tokens']:,} tokens · "
+            f"${op['estimated_cost_usd']:.6f}"
+        )
+
+    st.markdown(f"**Total records:** {len(records)}")
+
+
+# ---------------------------------------------------------------------------
 # Advanced / Debug
 # ---------------------------------------------------------------------------
 
@@ -411,3 +447,6 @@ def render_advanced() -> None:
             st.json(tokens)
         else:
             st.info("No quiz token usage data yet.")
+
+    with st.expander("Session Cost Summary"):
+        _display_session_cost_summary()

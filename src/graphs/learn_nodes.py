@@ -4,6 +4,7 @@ Each function takes a LearningState dict and returns a partial state update.
 """
 
 import json
+from typing import Any
 
 from loguru import logger
 from openai import OpenAI
@@ -13,6 +14,8 @@ from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
 from src.kb.retrieval import retrieve_documents
 from src.schemas import DifficultyLevel, ResponseStyle, Source, StudyGuide
+from src.services.cost_tracker import build_usage_record
+from src.services.retry import with_retry
 
 # Minimum number of retrieved chunks to consider sources sufficient
 _MIN_SOURCES = 2
@@ -207,12 +210,24 @@ def generate_study_guide(state: LearningState) -> dict:
 
     prompt = _build_prompt(state)
 
+    model = settings.app_default_model
+    usage_records = list(state.get("usage_records", []))
+
     try:
         client = OpenAI(api_key=settings.openai_api_key)
-        response = client.chat.completions.create(
-            model=settings.app_default_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
+
+        def _llm_call() -> Any:
+            return client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+
+        response = with_retry(
+            callable=_llm_call,
+            max_attempts=2,
+            base_delay=1.0,
+            handled_exceptions=(Exception,),
         )
         raw = response.choices[0].message.content or ""
         usage = response.usage
@@ -221,23 +236,30 @@ def generate_study_guide(state: LearningState) -> dict:
             token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
             token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
 
+        usage_dict = {
+            "prompt_tokens": usage.prompt_tokens if usage else 0,
+            "completion_tokens": usage.completion_tokens if usage else 0,
+            "total_tokens": usage.total_tokens if usage else 0,
+        }
+        usage_records.append(build_usage_record(model, "learn_guide_generation", usage_dict))
+
         trace.append(f"generate_study_guide: LLM returned {len(raw)} chars")
 
         guide = _parse_study_guide(raw, state)
         trace.append("generate_study_guide: parsed successfully")
-        return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except json.JSONDecodeError as e:
         logger.warning("Malformed LLM JSON output: {}", e)
         trace.append(f"generate_study_guide: malformed JSON — {e}, using fallback")
         guide = _build_fallback_guide(state)
-        return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except Exception as e:
         logger.error("LLM call failed: {}", e)
         trace.append(f"generate_study_guide: LLM error — {e}, using fallback")
         guide = _build_fallback_guide(state)
-        return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
 
 # ---------------------------------------------------------------------------

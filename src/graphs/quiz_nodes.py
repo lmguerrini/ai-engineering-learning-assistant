@@ -4,6 +4,7 @@ Each function takes a QuizState dict and returns a partial state update.
 """
 
 import json
+from typing import Any
 
 from loguru import logger
 from openai import OpenAI
@@ -11,6 +12,8 @@ from openai import OpenAI
 from src.config import get_settings
 from src.graphs.quiz_state import QuizState
 from src.schemas import DifficultyLevel, QuizQuestion, QuizResult
+from src.services.cost_tracker import build_usage_record
+from src.services.retry import with_retry
 
 # Default number of questions when not specified
 _DEFAULT_NUM_QUESTIONS = 5
@@ -145,12 +148,24 @@ def generate_quiz(state: QuizState) -> dict:
 
     prompt = _build_quiz_prompt(state)
 
+    model = settings.app_default_model
+    usage_records = list(state.get("usage_records", []))
+
     try:
         client = OpenAI(api_key=settings.openai_api_key)
-        response = client.chat.completions.create(
-            model=settings.app_default_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
+
+        def _llm_call() -> Any:
+            return client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.5,
+            )
+
+        response = with_retry(
+            callable=_llm_call,
+            max_attempts=2,
+            base_delay=1.0,
+            handled_exceptions=(Exception,),
         )
         raw = response.choices[0].message.content or ""
         usage = response.usage
@@ -159,22 +174,29 @@ def generate_quiz(state: QuizState) -> dict:
             token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
             token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
 
+        usage_dict = {
+            "prompt_tokens": usage.prompt_tokens if usage else 0,
+            "completion_tokens": usage.completion_tokens if usage else 0,
+            "total_tokens": usage.total_tokens if usage else 0,
+        }
+        usage_records.append(build_usage_record(model, "quiz_generation", usage_dict))
+
         trace.append(f"generate_quiz: LLM returned {len(raw)} chars")
         questions = _parse_quiz_response(raw)
         trace.append(f"generate_quiz: parsed {len(questions)} questions")
-        return {"questions": questions, "trace": trace, "token_usage": token_usage}
+        return {"questions": questions, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except json.JSONDecodeError as e:
         logger.warning("Malformed quiz JSON output: {}", e)
         trace.append(f"generate_quiz: malformed JSON — {e}, using fallback")
         questions = _build_fallback_questions(state)
-        return {"questions": questions, "trace": trace, "token_usage": token_usage}
+        return {"questions": questions, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
     except Exception as e:
         logger.error("Quiz LLM call failed: {}", e)
         trace.append(f"generate_quiz: LLM error — {e}, using fallback")
         questions = _build_fallback_questions(state)
-        return {"questions": questions, "trace": trace, "token_usage": token_usage}
+        return {"questions": questions, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
 
 # ---------------------------------------------------------------------------

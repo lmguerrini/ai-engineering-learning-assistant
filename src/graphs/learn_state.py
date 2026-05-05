@@ -35,5 +35,6 @@ class LearningState(TypedDict, total=False):
     error: str | None
     trace: list[str]
 
-    # --- Token / cost tracking hook ---
+    # --- Token / cost tracking ---
     token_usage: dict[str, int]
+    usage_records: list[dict[str, Any]]
