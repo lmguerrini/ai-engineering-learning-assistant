@@ -12,6 +12,7 @@ from openai import OpenAI
 from src.config import get_settings
 from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
+from src.kb.official_docs import retrieve_with_fallback
 from src.kb.retrieval import retrieve_documents
 from src.schemas import DifficultyLevel, ResponseStyle, Source, StudyGuide
 from src.services.cache import build_cache_key, get_cached_value, set_cached_value
@@ -98,14 +99,29 @@ def load_user_memory(state: LearningState) -> dict:
 # ---------------------------------------------------------------------------
 
 def retrieve_sources(state: LearningState) -> dict:
-    """Retrieve relevant documents from the knowledge base."""
+    """Retrieve relevant documents from the knowledge base.
+
+    First retrieves from the curated KB, then uses official docs
+    as fallback/enrichment if curated results are insufficient.
+    """
     trace = list(state.get("trace", []))
     attempts = state.get("attempts", 0) + 1
     query = state.get("query", state.get("topic", ""))
     trace.append(f"retrieve_sources: query='{query}' (attempt {attempts})")
 
-    docs = retrieve_documents(query=query, top_k=6)
-    trace.append(f"retrieve_sources: got {len(docs)} chunks")
+    curated_docs = retrieve_documents(query=query, top_k=6)
+    trace.append(f"retrieve_sources: got {len(curated_docs)} curated chunks")
+
+    docs = retrieve_with_fallback(
+        query=query,
+        curated_docs=curated_docs,
+        min_sources=_MIN_SOURCES,
+        min_content_chars=_MIN_CONTENT_CHARS,
+    )
+    official_count = len(docs) - len(curated_docs)
+    if official_count > 0:
+        trace.append(f"retrieve_sources: added {official_count} official doc chunks as fallback")
+    trace.append(f"retrieve_sources: total {len(docs)} chunks")
     return {"retrieved_docs": docs, "attempts": attempts, "trace": trace}
 
 

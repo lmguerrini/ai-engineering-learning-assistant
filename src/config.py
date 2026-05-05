@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
     chroma_persist_dir: str = "data/chroma"
     raw_documents_dir: str = "data/raw"
+    official_docs_dir: str = "data/official_docs"
+    official_docs_collection: str = "official_docs"
 
 
 def get_settings() -> Settings:
