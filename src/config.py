@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     app_log_level: str = "DEBUG"
     app_default_model: str = "gpt-4o-mini"
 
+    # Knowledge Base
+    embedding_model: str = "text-embedding-3-small"
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    chroma_persist_dir: str = "data/chroma"
+    raw_documents_dir: str = "data/raw"
+
 
 def get_settings() -> Settings:
     """Return a cached Settings instance."""
