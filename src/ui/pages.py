@@ -184,6 +184,12 @@ def _display_quiz_results(result: dict) -> None:
         for step in next_steps:
             st.markdown(f"- {step}")
 
+    suggested_topics = result.get("suggested_topics", [])
+    if suggested_topics:
+        st.markdown("### 🎯 Suggested Topics to Study Next")
+        for t in suggested_topics:
+            st.markdown(f"- {t}")
+
 
 def render_quiz() -> None:
     """Render the Quiz section with generation, answering, and evaluation."""
