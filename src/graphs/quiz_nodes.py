@@ -316,14 +316,30 @@ def extract_weak_areas(state: QuizState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Node: create_memory_candidate_placeholder
+# Node: create_memory_candidate
 # ---------------------------------------------------------------------------
 
-def create_memory_candidate_placeholder(state: QuizState) -> dict:
-    """Placeholder for creating a memory candidate from quiz results (Phase 5)."""
+def create_memory_candidate(state: QuizState) -> dict:
+    """Build a memory candidate dict from quiz results for HITL approval.
+
+    The graph does NOT write to the database — the candidate is returned
+    in the state so that the UI can ask the user whether to save it.
+    """
     trace = list(state.get("trace", []))
-    trace.append("create_memory_candidate_placeholder: skipped (placeholder)")
-    return {"trace": trace}
+    trace.append("create_memory_candidate: started")
+
+    topic = state.get("topic", "Unknown")
+    score = state.get("score", 0.0)
+    weak_areas = state.get("weak_areas", [])
+
+    candidate = {
+        "topic": topic,
+        "score": score,
+        "weak_areas": weak_areas,
+    }
+
+    trace.append(f"create_memory_candidate: candidate ready (score={score})")
+    return {"memory_candidate": candidate, "trace": trace}
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ class QuizState(TypedDict, total=False):
     suggested_next_steps: list[str]
     quiz_result: QuizResult | None
 
+    # --- Memory candidate (HITL — not persisted inside graph) ---
+    memory_candidate: dict[str, Any] | None
+
     # --- Output / control ---
     error: str | None
     trace: list[str]

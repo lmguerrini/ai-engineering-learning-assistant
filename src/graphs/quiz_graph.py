@@ -13,7 +13,7 @@ from loguru import logger
 from langgraph.graph import END, START, StateGraph
 
 from src.graphs.quiz_nodes import (
-    create_memory_candidate_placeholder,
+    create_memory_candidate,
     evaluate_answers,
     extract_weak_areas,
     generate_quiz,
@@ -67,13 +67,13 @@ def build_quiz_evaluation_graph() -> StateGraph:
 
     graph.add_node("evaluate_answers", evaluate_answers)
     graph.add_node("extract_weak_areas", extract_weak_areas)
-    graph.add_node("create_memory_candidate_placeholder", create_memory_candidate_placeholder)
+    graph.add_node("create_memory_candidate", create_memory_candidate)
     graph.add_node("return_results", return_results)
 
     graph.add_edge(START, "evaluate_answers")
     graph.add_edge("evaluate_answers", "extract_weak_areas")
-    graph.add_edge("extract_weak_areas", "create_memory_candidate_placeholder")
-    graph.add_edge("create_memory_candidate_placeholder", "return_results")
+    graph.add_edge("extract_weak_areas", "create_memory_candidate")
+    graph.add_edge("create_memory_candidate", "return_results")
     graph.add_edge("return_results", END)
 
     return graph
