@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from src.schemas import DifficultyLevel, ResponseStyle, StudyGuide
+from src.schemas import DifficultyLevel, QuizQuestion, ResponseStyle, StudyGuide
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ def render_intro() -> None:
         Select a section from the sidebar to get started.
         """
     )
-    st.info("🚧 This is an early version. Quiz and memory features are coming soon.")
+    st.info("🚧 This is an early version. Memory and progress features are coming soon.")
 
 
 # ---------------------------------------------------------------------------
@@ -135,17 +135,150 @@ def render_learn() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Quiz (placeholder)
+# Quiz
 # ---------------------------------------------------------------------------
 
+def _display_quiz_questions(questions: list[QuizQuestion]) -> list[str]:
+    """Display quiz questions and collect user answers via radio buttons."""
+    answers: list[str] = []
+    for i, q in enumerate(questions):
+        st.markdown(f"**Q{i + 1}.** {q.question}")
+        choice = st.radio(
+            f"Select your answer for Q{i + 1}:",
+            options=q.options,
+            key=f"quiz_q_{i}",
+            index=None,
+        )
+        answers.append(choice if choice else "")
+        st.divider()
+    return answers
+
+
+def _display_quiz_results(result: dict) -> None:
+    """Display evaluation results: score, feedback, weak areas, next steps."""
+    score = result.get("score", 0.0)
+    explanations = result.get("explanations", [])
+    weak_areas = result.get("weak_areas", [])
+    next_steps = result.get("suggested_next_steps", [])
+    quiz_result = result.get("quiz_result")
+
+    if quiz_result:
+        st.subheader(f"📊 Score: {quiz_result.correct_count}/{quiz_result.total_questions} ({quiz_result.score_percent}%)")
+        st.markdown(quiz_result.feedback)
+    else:
+        st.subheader(f"📊 Score: {score:.0f}%")
+
+    if explanations:
+        st.markdown("### Per-Question Feedback")
+        for exp in explanations:
+            st.markdown(exp)
+
+    if weak_areas:
+        st.markdown("### 🔴 Weak Areas")
+        for area in weak_areas:
+            st.markdown(f"- {area}")
+
+    if next_steps:
+        st.markdown("### 💡 Suggested Next Steps")
+        for step in next_steps:
+            st.markdown(f"- {step}")
+
+
 def render_quiz() -> None:
-    """Render the Quiz section placeholder."""
+    """Render the Quiz section with generation, answering, and evaluation."""
     st.header("🧠 Quiz")
-    st.markdown(
-        "Answer AI Engineering questions and get instant feedback. "
-        "*(Coming in Phase 4)*"
-    )
-    st.button("Start Quiz", disabled=True, key="btn_quiz")
+    st.markdown("Test your understanding with AI-generated quiz questions.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        topic = st.selectbox("Topic", LEARN_TOPICS, key="quiz_topic")
+    with col2:
+        difficulty = st.selectbox(
+            "Difficulty",
+            [d.value for d in DifficultyLevel],
+            index=1,
+            key="quiz_difficulty",
+        )
+    with col3:
+        num_questions = st.number_input(
+            "Number of Questions",
+            min_value=1,
+            max_value=10,
+            value=5,
+            key="quiz_num_q",
+        )
+
+    # Use study guide context from session if available
+    study_context = ""
+    last_guide = st.session_state.get("last_study_guide")
+    if last_guide and hasattr(last_guide, "topic") and last_guide.topic == topic:
+        study_context = last_guide.detailed_notes or last_guide.summary or ""
+        st.caption("📘 Using context from your last study guide.")
+
+    generate = st.button("🎯 Generate Quiz", key="btn_generate_quiz")
+
+    if generate:
+        with st.spinner("Generating quiz…"):
+            from src.graphs.quiz_graph import run_quiz_generation
+
+            result = run_quiz_generation(
+                topic=topic,
+                difficulty=DifficultyLevel(difficulty),
+                num_questions=num_questions,
+                study_guide_context=study_context,
+            )
+
+        error = result.get("error")
+        if error:
+            st.error(f"⚠️ {error}")
+        else:
+            questions = result.get("questions", [])
+            if questions:
+                st.session_state["quiz_questions"] = questions
+                st.session_state["quiz_topic"] = topic
+                st.session_state["quiz_eval_result"] = None
+                val_errors = result.get("validation_errors", [])
+                if val_errors:
+                    st.warning("⚠️ Quiz validation warnings: " + "; ".join(val_errors))
+            else:
+                st.warning("No questions were generated. Try a different topic.")
+
+        st.session_state["last_quiz_trace"] = result.get("trace", [])
+        st.session_state["last_quiz_tokens"] = result.get("token_usage", {})
+
+    # Display questions if available
+    questions = st.session_state.get("quiz_questions", [])
+    if questions:
+        st.subheader(f"📝 Quiz: {st.session_state.get('quiz_topic', topic)}")
+        user_answers = _display_quiz_questions(questions)
+
+        submit = st.button("✅ Submit Answers", key="btn_submit_quiz")
+        if submit:
+            with st.spinner("Evaluating answers…"):
+                from src.graphs.quiz_graph import run_quiz_evaluation
+
+                eval_result = run_quiz_evaluation(
+                    topic=st.session_state.get("quiz_topic", topic),
+                    questions=questions,
+                    user_answers=user_answers,
+                )
+
+            st.session_state["quiz_eval_result"] = eval_result
+            st.session_state["last_quiz_trace"] = eval_result.get("trace", [])
+            st.session_state["last_quiz_tokens"] = eval_result.get("token_usage", {})
+
+    # Display evaluation results if available
+    eval_result = st.session_state.get("quiz_eval_result")
+    if eval_result:
+        eval_error = eval_result.get("error")
+        if eval_error:
+            st.error(f"⚠️ {eval_error}")
+        else:
+            _display_quiz_results(eval_result)
+
+        with st.expander("🔍 Debug Trace"):
+            for entry in eval_result.get("trace", []):
+                st.text(entry)
 
 
 # ---------------------------------------------------------------------------
@@ -201,3 +334,18 @@ def render_advanced() -> None:
             st.json(tokens)
         else:
             st.info("No token usage data yet.")
+
+    with st.expander("Last Quiz Workflow Trace"):
+        trace = st.session_state.get("last_quiz_trace", [])
+        if trace:
+            for entry in trace:
+                st.text(entry)
+        else:
+            st.info("No quiz trace available yet. Generate a quiz first.")
+
+    with st.expander("Last Quiz Token Usage"):
+        tokens = st.session_state.get("last_quiz_tokens", {})
+        if tokens:
+            st.json(tokens)
+        else:
+            st.info("No quiz token usage data yet.")
