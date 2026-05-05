@@ -73,6 +73,37 @@ def _display_study_guide(guide: StudyGuide) -> None:
                 st.markdown(src.content_snippet if src.content_snippet else "_No snippet available._")
 
 
+def _display_feedback_widget(context_type: str, topic: str) -> None:
+    """Display a rating + comment feedback form for learn or quiz."""
+    if not topic:
+        return
+
+    key_prefix = f"fb_{context_type}"
+    saved_key = f"{key_prefix}_saved"
+
+    if st.session_state.get(saved_key):
+        st.success("✅ Feedback saved. Thank you!")
+        return
+
+    with st.expander(f"💬 Rate this {context_type} experience"):
+        rating = st.slider(
+            "Rating", min_value=1, max_value=5, value=4, key=f"{key_prefix}_rating",
+        )
+        comment = st.text_input(
+            "Comment (optional)", key=f"{key_prefix}_comment",
+        )
+        if st.button("Submit Feedback", key=f"{key_prefix}_btn"):
+            from src.memory.feedback_service import save_feedback
+
+            save_feedback(
+                context_type=context_type,
+                topic=topic,
+                rating=rating,
+                comment=comment,
+            )
+            st.session_state[saved_key] = True
+
+
 def render_learn() -> None:
     """Render the Learn section with topic input and study guide generation."""
     st.header("📖 Learn")
@@ -121,6 +152,8 @@ def render_learn() -> None:
             else:
                 st.warning("No study guide was generated. Try a different topic.")
 
+            st.session_state["last_learn_topic"] = topic
+
         # Store trace, token usage, and cost records for debug view
         st.session_state["last_learn_trace"] = result.get("trace", [])
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
@@ -133,6 +166,9 @@ def render_learn() -> None:
             tokens = result.get("token_usage", {})
             if tokens:
                 st.json(tokens)
+
+    # Feedback after study guide
+    _display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +321,9 @@ def render_quiz() -> None:
             _display_quiz_results(eval_result)
             _display_hitl_save(eval_result)
 
+        # Feedback after quiz results
+        _display_feedback_widget("quiz", st.session_state.get("quiz_topic", topic))
+
         with st.expander("🔍 Debug Trace"):
             for entry in eval_result.get("trace", []):
                 st.text(entry)
@@ -339,30 +378,53 @@ def _display_hitl_save(eval_result: dict) -> None:
 def render_progress() -> None:
     """Render the Progress / Feedback section with learning memory data."""
     st.header("📊 Progress / Feedback")
-    st.markdown("Track your studied topics, quiz scores, and weak areas.")
+    st.markdown("Track your studied topics, quiz scores, weak areas, and feedback.")
 
     from src.memory.memory_service import get_recent_topics, get_weak_areas_summary
 
     recent = get_recent_topics(limit=10)
     if not recent:
         st.info("No progress data yet. Complete a quiz and save your result.")
-        return
-
-    st.subheader("📋 Recent Learning Sessions")
-    for evt in recent:
-        weak_str = ", ".join(evt["weak_areas"]) if evt["weak_areas"] else "—"
-        st.markdown(
-            f"- **{evt['topic']}** — Score: {evt['score']:.0f}% · "
-            f"Weak areas: {weak_str} · {evt['timestamp'][:10]}"
-        )
-
-    st.subheader("🔴 Weak Areas Summary")
-    summary = get_weak_areas_summary()
-    if summary:
-        for area, count in sorted(summary.items(), key=lambda x: -x[1]):
-            st.markdown(f"- **{area}** — appeared {count} time(s)")
     else:
-        st.info("No weak areas recorded yet.")
+        st.subheader("📋 Recent Learning Sessions")
+        for evt in recent:
+            weak_str = ", ".join(evt["weak_areas"]) if evt["weak_areas"] else "—"
+            st.markdown(
+                f"- **{evt['topic']}** — Score: {evt['score']:.0f}% · "
+                f"Weak areas: {weak_str} · {evt['timestamp'][:10]}"
+            )
+
+        st.subheader("🔴 Weak Areas Summary")
+        summary = get_weak_areas_summary()
+        if summary:
+            for area, count in sorted(summary.items(), key=lambda x: -x[1]):
+                st.markdown(f"- **{area}** — appeared {count} time(s)")
+        else:
+            st.info("No weak areas recorded yet.")
+
+    # Feedback section
+    st.subheader("💬 Recent Feedback")
+    from src.memory.feedback_service import get_recent_feedback, get_feedback_summary
+
+    fb_entries = get_recent_feedback(limit=5)
+    if fb_entries:
+        for fb in fb_entries:
+            stars = "⭐" * fb["rating"]
+            comment = fb["comment"] if fb["comment"] else "—"
+            st.markdown(
+                f"- {stars} **{fb['context_type']}** / {fb['topic']} — "
+                f"{comment} · {fb['timestamp'][:10]}"
+            )
+    else:
+        st.info("No feedback recorded yet.")
+
+    fb_summary = get_feedback_summary()
+    if fb_summary.get("total_count", 0) > 0:
+        st.subheader("📈 Feedback Summary")
+        st.markdown(f"- **Average rating:** {fb_summary['average_rating']}")
+        st.markdown(f"- **Total feedback entries:** {fb_summary['total_count']}")
+        if fb_summary.get("suggestion"):
+            st.markdown(f"- **Personalization suggestion:** {fb_summary['suggestion']}")
 
 
 # ---------------------------------------------------------------------------
@@ -456,3 +518,12 @@ def render_advanced() -> None:
 
     with st.expander("Session Cost Summary"):
         _display_session_cost_summary()
+
+    with st.expander("Feedback Summary"):
+        from src.memory.feedback_service import get_feedback_summary
+
+        fb_summary = get_feedback_summary()
+        if fb_summary.get("total_count", 0) > 0:
+            st.json(fb_summary)
+        else:
+            st.info("No feedback data yet.")
