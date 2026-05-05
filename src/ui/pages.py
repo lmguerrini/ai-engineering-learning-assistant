@@ -275,6 +275,7 @@ def render_quiz() -> None:
             st.error(f"⚠️ {eval_error}")
         else:
             _display_quiz_results(eval_result)
+            _display_hitl_save(eval_result)
 
         with st.expander("🔍 Debug Trace"):
             for entry in eval_result.get("trace", []):
@@ -282,17 +283,78 @@ def render_quiz() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Progress / Feedback (placeholder)
+# HITL — Save / Skip
+# ---------------------------------------------------------------------------
+
+def _display_hitl_save(eval_result: dict) -> None:
+    """Show save/skip buttons for the memory candidate (HITL)."""
+    candidate = eval_result.get("memory_candidate")
+    if not candidate:
+        return
+
+    st.markdown("---")
+    st.markdown("### 💾 Save this result to your learning memory?")
+    st.markdown(
+        f"**Topic:** {candidate.get('topic', 'N/A')} · "
+        f"**Score:** {candidate.get('score', 0):.0f}%"
+    )
+    weak = candidate.get("weak_areas", [])
+    if weak:
+        st.markdown("**Weak areas:** " + ", ".join(weak))
+
+    col_save, col_skip, _ = st.columns([1, 1, 4])
+    with col_save:
+        if st.button("💾 Save", key="btn_hitl_save"):
+            from src.memory.memory_service import save_learning_event
+
+            save_learning_event(
+                topic=candidate["topic"],
+                score=candidate["score"],
+                weak_areas=candidate.get("weak_areas", []),
+            )
+            st.session_state["hitl_saved"] = True
+    with col_skip:
+        if st.button("⏭️ Skip", key="btn_hitl_skip"):
+            st.session_state["hitl_saved"] = False
+
+    saved = st.session_state.get("hitl_saved")
+    if saved is True:
+        st.success("✅ Result saved to learning memory.")
+    elif saved is False:
+        st.info("Skipped — result not saved.")
+
+
+# ---------------------------------------------------------------------------
+# Progress / Feedback
 # ---------------------------------------------------------------------------
 
 def render_progress() -> None:
-    """Render the Progress / Feedback section placeholder."""
+    """Render the Progress / Feedback section with learning memory data."""
     st.header("📊 Progress / Feedback")
-    st.markdown(
-        "Track your studied topics, quiz scores, and weak areas. "
-        "*(Coming in Phase 5)*"
-    )
-    st.info("No progress data yet. Complete a quiz to see your results here.")
+    st.markdown("Track your studied topics, quiz scores, and weak areas.")
+
+    from src.memory.memory_service import get_recent_topics, get_weak_areas_summary
+
+    recent = get_recent_topics(limit=10)
+    if not recent:
+        st.info("No progress data yet. Complete a quiz and save your result.")
+        return
+
+    st.subheader("📋 Recent Learning Sessions")
+    for evt in recent:
+        weak_str = ", ".join(evt["weak_areas"]) if evt["weak_areas"] else "—"
+        st.markdown(
+            f"- **{evt['topic']}** — Score: {evt['score']:.0f}% · "
+            f"Weak areas: {weak_str} · {evt['timestamp'][:10]}"
+        )
+
+    st.subheader("🔴 Weak Areas Summary")
+    summary = get_weak_areas_summary()
+    if summary:
+        for area, count in sorted(summary.items(), key=lambda x: -x[1]):
+            st.markdown(f"- **{area}** — appeared {count} time(s)")
+    else:
+        st.info("No weak areas recorded yet.")
 
 
 # ---------------------------------------------------------------------------
