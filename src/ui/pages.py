@@ -3,8 +3,9 @@
 import streamlit as st
 
 from src.schemas import DifficultyLevel, QuizQuestion, ResponseStyle, StudyGuide
-from src.demo.review_examples import get_demo_by_title, get_demo_titles
 from src.ui.display_helpers import (
+    deduplicate_sources,
+    downgrade_headings,
     format_error_message,
     format_graph_state_summary,
     format_memory_transparency,
@@ -12,9 +13,42 @@ from src.ui.display_helpers import (
     format_sources_summary,
 )
 
+# ---------------------------------------------------------------------------
+# User-facing label mappings
+# ---------------------------------------------------------------------------
+
+_LEARN_PATH_LABELS = ["Beginner", "Intermediate", "Advanced"]
+_LEARN_PATH_TO_ENUM = {
+    "Beginner": DifficultyLevel.BEGINNER,
+    "Intermediate": DifficultyLevel.INTERMEDIATE,
+    "Advanced": DifficultyLevel.ADVANCED,
+}
+_LEARNING_DEPTH_LABELS = ["Summary", "Deep Study"]
+_DEPTH_TO_STYLE = {
+    "Summary": ResponseStyle.CONCISE,
+    "Deep Study": ResponseStyle.DETAILED,
+}
+_LEARNING_MODE_LABELS = ["Learn Path", "Topic"]
+
+# Learn Path mode: maps path level to a guided topic string
+_LEARN_PATH_TOPIC_MAP = {
+    "Beginner": (
+        "Foundations of AI Engineering: LLM basics, prompt engineering, "
+        "development environment, and API usage"
+    ),
+    "Intermediate": (
+        "Chains, RAG, and tools: LangChain chains, retrieval-augmented generation, "
+        "function calling, tool integration, and evaluation"
+    ),
+    "Advanced": (
+        "Agents and orchestration: LangGraph state management, agentic RAG, "
+        "long-term memory, human-in-the-loop, observability, and production deployment"
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
-# Available topics for the Learn section
+# Available topics for the Learn section (Topic mode)
 # ---------------------------------------------------------------------------
 
 LEARN_TOPICS = [
@@ -38,30 +72,32 @@ LEARN_TOPICS = [
 def _show_friendly_error(error_type: str) -> None:
     """Display a user-friendly error block."""
     err = format_error_message(error_type)
-    st.warning(f"{err['icon']} **{err['title']}** — {err['message']}")
-    st.caption(f"💡 {err['suggestion']}")
+    st.warning(f"**{err['title']}** — {err['message']}")
+    st.caption(err["suggestion"])
 
 
 def _display_sources_section(guide: StudyGuide) -> None:
     """Render source transparency for a study guide."""
-    sources = guide.sources if guide else []
-    st.markdown(f"### 📚 Sources — {format_sources_summary(sources)}")
+    sources = deduplicate_sources(guide.sources) if guide else []
+    st.markdown(f"#### Sources — {format_sources_summary(sources)}")
 
     if not sources:
         st.info(
-            "ℹ️ No sources found. If the KB has not been ingested yet, "
+            "No sources found. If the KB has not been ingested yet, "
             "run the ingestion pipeline first, then try again."
         )
         return
 
     for src in sources:
         info = format_source_display(src)
-        label = f"📄 {info['title']} (relevance: {info['relevance_label']})"
+        meta_parts = [f"{k}: {v}" for k, v in info["metadata_items"]]
+        meta_str = " · ".join(meta_parts) if meta_parts else ""
+        label = info["title"]
+        if meta_str:
+            label += f" ({meta_str})"
         with st.expander(label):
-            if info["metadata_items"]:
-                meta_str = " · ".join(f"**{k}:** {v}" for k, v in info["metadata_items"])
-                st.markdown(meta_str)
-            st.markdown(info["snippet"])
+            st.caption(f"Relevance: {info['relevance_label']}")
+            st.text(info["snippet"][:300])
 
 
 def _display_memory_section(result: dict) -> None:
@@ -69,9 +105,12 @@ def _display_memory_section(result: dict) -> None:
     profile = result.get("memory_profile")
     mem = format_memory_transparency(profile)
 
-    with st.expander("🧠 Memory Profile"):
+    with st.expander("Memory Profile"):
         if not mem["loaded"]:
-            st.info(mem["message"])
+            st.info(
+                "Memory profile will be built automatically as you study "
+                "and save quiz results."
+            )
             return
 
         if mem.get("recent_topics"):
@@ -86,80 +125,123 @@ def _display_memory_section(result: dict) -> None:
             st.markdown(f"**Preferred style:** {mem['preferred_style']}")
 
 
-def _display_debug_trace(result: dict, label: str = "Debug Trace") -> None:
-    """Render workflow trace with state summary."""
-    with st.expander(f"🔍 {label}"):
-        # State summary fields
+def _display_debug_trace(result: dict, label: str = "Workflow Trace") -> None:
+    """Render workflow trace grouped into logical sections."""
+    with st.expander(label):
         fields = format_graph_state_summary(result)
         if fields:
+            request_fields = []
+            retrieval_fields = []
+            memory_fields = []
+            token_fields = []
             for f in fields:
-                st.markdown(f"- **{f['label']}:** {f['value']}")
+                lbl = f["label"]
+                if lbl in ("Topic", "Learn Path", "Learning Depth", "Learning Mode"):
+                    request_fields.append(f)
+                elif lbl in ("Sources Retrieved", "Retrieval Attempts", "Query Refined"):
+                    retrieval_fields.append(f)
+                elif lbl in ("Memory Profile",):
+                    memory_fields.append(f)
+                elif lbl in ("Total Tokens",):
+                    token_fields.append(f)
+
+            if request_fields:
+                st.markdown("**Request**")
+                for f in request_fields:
+                    st.markdown(f"- {f['label']}: {f['value']}")
+            if retrieval_fields:
+                st.markdown("**Retrieval**")
+                for f in retrieval_fields:
+                    st.markdown(f"- {f['label']}: {f['value']}")
+            if memory_fields:
+                st.markdown("**Memory**")
+                for f in memory_fields:
+                    st.markdown(f"- {f['label']}: {f['value']}")
+            if token_fields:
+                st.markdown("**Token Usage**")
+                for f in token_fields:
+                    st.markdown(f"- {f['label']}: {f['value']}")
             st.markdown("---")
 
         trace = result.get("trace", [])
-        if trace:
-            for entry in trace:
-                st.text(entry)
-        else:
-            st.info("No trace entries recorded.")
+        with st.expander("Raw trace"):
+            if trace:
+                for entry in trace:
+                    st.text(entry)
+            else:
+                st.info("No trace entries recorded.")
 
         tokens = result.get("token_usage", {})
         if tokens and tokens.get("total_tokens"):
-            st.json(tokens)
+            with st.expander("Raw token details"):
+                st.json(tokens)
 
 
 # ---------------------------------------------------------------------------
-# Intro / Help
+# Home
 # ---------------------------------------------------------------------------
 
 def render_intro() -> None:
-    """Render the Intro / Help section."""
-    st.header("👋 Welcome to the AI Engineering Learning Assistant")
+    """Render the Home section."""
+    st.header("Welcome to the AI Engineering Learning App")
     st.markdown(
         """
-        This app helps you study AI Engineering concepts through a guided workflow:
+        This app helps you study AI Engineering concepts through guided workflows:
 
-        1. **Learn** — Get a structured study guide on a chosen topic.
+        1. **Learn** — Generate a structured Learn Path on a chosen topic.
         2. **Quiz** — Test your understanding with generated questions.
-        3. **Progress / Feedback** — Review your scores, weak areas, and preferences.
-        4. **Advanced / Debug** — Inspect retrieval data, graph traces, and settings.
+        3. **Progress** — Review your scores, weak areas, and preferences.
+        4. **Dashboard** — Inspect retrieval data, graph traces, and settings.
 
         Select a section from the sidebar to get started.
         """
     )
 
-    # Check for missing API key and show helpful hint
     try:
         from src.config import get_settings
         settings = get_settings()
         if not settings.openai_api_key:
             _show_friendly_error("no_api_key")
         else:
-            st.success("✅ OpenAI API key configured. You're ready to learn!")
+            st.success("OpenAI API key configured. You're ready to learn.")
     except Exception:
-        st.info("🚧 This is an early version. Configure your .env file to get started.")
+        st.info("This is an early version. Configure your .env file to get started.")
 
 
 # ---------------------------------------------------------------------------
 # Learn
 # ---------------------------------------------------------------------------
 
-def _display_study_guide(guide: StudyGuide) -> None:
-    """Render a structured study guide in the Streamlit UI."""
-    st.subheader(f"📘 {guide.topic}")
-    st.caption(f"Difficulty: {guide.difficulty.value}")
+def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
+                         mode: str = "Topic") -> None:
+    """Render a structured Learn Path in the Streamlit UI."""
+    if mode == "Learn Path":
+        level_label = guide.difficulty.value.capitalize()
+        st.subheader(f"{level_label} Learn Path")
+        st.caption(f"Learn Path Mode · {depth}")
+    else:
+        st.subheader(guide.topic)
+        st.caption(f"Topic Mode · {depth}")
 
-    st.markdown("### Summary")
+    st.markdown("#### Overview")
     st.markdown(guide.summary)
 
+    # Show Topics section when concepts are available
     if guide.key_concepts:
-        st.markdown("### Key Concepts")
-        for concept in guide.key_concepts:
-            st.markdown(f"- {concept}")
+        st.markdown("#### Topics")
+        for i, concept in enumerate(guide.key_concepts, 1):
+            if ":" in concept:
+                name, desc = concept.split(":", 1)
+                st.markdown(f"{i}. **{name.strip()}** — {desc.strip()}")
+            else:
+                st.markdown(f"{i}. **{concept}**")
 
     if guide.detailed_notes:
-        st.markdown("### Detailed Notes")
-        st.markdown(guide.detailed_notes)
+        notes = downgrade_headings(guide.detailed_notes)
+        # Skip redundant "Content" heading when notes already start with a section
+        if not notes.lstrip().startswith("#"):
+            st.markdown("#### Content")
+        st.markdown(notes)
 
     _display_sources_section(guide)
 
@@ -173,10 +255,10 @@ def _display_feedback_widget(context_type: str, topic: str) -> None:
     saved_key = f"{key_prefix}_saved"
 
     if st.session_state.get(saved_key):
-        st.success("✅ Feedback saved. Thank you!")
+        st.success("Feedback saved. Thank you!")
         return
 
-    with st.expander(f"💬 Rate this {context_type} experience"):
+    with st.expander(f"Rate this {context_type} experience"):
         rating = st.slider(
             "Rating", min_value=1, max_value=5, value=4, key=f"{key_prefix}_rating",
         )
@@ -196,92 +278,92 @@ def _display_feedback_widget(context_type: str, topic: str) -> None:
 
 
 def render_learn() -> None:
-    """Render the Learn section with topic input and study guide generation."""
-    st.header("📖 Learn")
+    """Render the Learn section with Learning Mode selection."""
+    st.header("Learn")
     st.markdown(
-        "Select a topic and generate a structured study guide powered by "
-        "Agentic RAG."
+        "Generate a focused **Topic** study or a guided multi-topic "
+        "**Learn Path** powered by Agentic RAG."
     )
 
-    # Demo examples selector
-    with st.expander("💡 Try a demo example"):
-        demo_titles = get_demo_titles()
-        selected_demo = st.selectbox(
-            "Demo topic", [""] + demo_titles, key="demo_select",
-        )
-        if selected_demo:
-            demo = get_demo_by_title(selected_demo)
-            if demo:
-                st.caption(demo.description)
-                st.caption(f"Features: {', '.join(demo.features_exercised)}")
-                if st.button("Use this demo topic", key="btn_use_demo"):
-                    st.session_state["learn_topic_custom"] = demo.topic
-                    st.session_state["learn_difficulty_demo"] = demo.difficulty
-                    st.session_state["learn_style_demo"] = demo.response_style
+    # Learning Mode selector
+    learning_mode = st.selectbox(
+        "Learning Mode", _LEARNING_MODE_LABELS,
+        index=0, key="learn_mode",
+    )
 
-    # Use demo topic if set, else manual selection
-    demo_topic = st.session_state.pop("learn_topic_custom", None)
-    demo_diff = st.session_state.pop("learn_difficulty_demo", None)
-    demo_style = st.session_state.pop("learn_style_demo", None)
+    if learning_mode == "Learn Path":
+        col1, col2 = st.columns(2)
+        with col1:
+            learn_path = st.selectbox(
+                "Learn Path",
+                _LEARN_PATH_LABELS,
+                index=1,
+                key="learn_path",
+            )
+        with col2:
+            depth_label = st.selectbox(
+                "Learning Depth",
+                _LEARNING_DEPTH_LABELS,
+                index=1,
+                key="learn_depth",
+            )
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if demo_topic:
-            topic = st.text_input("Topic", value=demo_topic, key="learn_topic_input")
-        else:
+        topic = _LEARN_PATH_TOPIC_MAP[learn_path]
+        difficulty = _LEARN_PATH_TO_ENUM[learn_path]
+        style = _DEPTH_TO_STYLE[depth_label]
+
+    else:  # Topic mode
+        col1, col2 = st.columns(2)
+        with col1:
             topic = st.selectbox("Topic", LEARN_TOPICS, key="learn_topic")
-    with col2:
-        difficulty = st.selectbox(
-            "Difficulty",
-            [d.value for d in DifficultyLevel],
-            index=1,
-            key="learn_difficulty",
-        )
-    with col3:
-        style = st.selectbox(
-            "Response Style",
-            [s.value for s in ResponseStyle],
-            index=1,
-            key="learn_style",
-        )
+        with col2:
+            depth_label = st.selectbox(
+                "Learning Depth",
+                _LEARNING_DEPTH_LABELS,
+                index=1,
+                key="learn_depth_topic",
+            )
 
-    generate = st.button("🚀 Generate Study Guide", key="btn_learn")
+        difficulty = DifficultyLevel.INTERMEDIATE
+        style = _DEPTH_TO_STYLE[depth_label]
+
+    btn_label = "Generate Learn Path" if learning_mode == "Learn Path" else "Generate Topic"
+    generate = st.button(btn_label, key="btn_learn")
 
     if generate:
-        with st.spinner("Running Learn workflow…"):
+        with st.spinner("Running Learn workflow..."):
             from src.graphs.learn_graph import run_learn_workflow
 
             result = run_learn_workflow(
                 topic=topic,
-                difficulty=DifficultyLevel(difficulty),
-                style=ResponseStyle(style),
+                difficulty=difficulty,
+                style=style,
             )
 
         st.session_state["last_learn_result"] = result
+        st.session_state["last_learn_depth"] = depth_label
+        st.session_state["last_learn_mode"] = learning_mode
 
         error = result.get("error")
         if error:
-            st.error(f"⚠️ {error}")
+            st.error(error)
         else:
             guide = result.get("study_guide")
             if guide:
-                _display_study_guide(guide)
+                _display_study_guide(guide, depth=depth_label, mode=learning_mode)
                 st.session_state["last_study_guide"] = guide
             else:
-                st.warning("No study guide was generated. Try a different topic.")
+                st.warning("No Learn Path was generated. Try a different topic.")
 
             st.session_state["last_learn_topic"] = topic
 
-        # Store trace, token usage, and cost records for debug view
         st.session_state["last_learn_trace"] = result.get("trace", [])
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
         _accumulate_usage_records(result.get("usage_records", []))
 
-        # Memory and debug transparency
         _display_memory_section(result)
         _display_debug_trace(result, "Learn Workflow Trace")
 
-    # Feedback after study guide
     _display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))
 
 
@@ -351,7 +433,7 @@ def render_quiz() -> None:
         topic = st.selectbox("Topic", LEARN_TOPICS, key="quiz_topic")
     with col2:
         difficulty = st.selectbox(
-            "Difficulty",
+            "Learn Path",
             [d.value for d in DifficultyLevel],
             index=1,
             key="quiz_difficulty",
