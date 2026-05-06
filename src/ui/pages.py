@@ -376,56 +376,55 @@ def _display_quiz_questions(questions: list[QuizQuestion]) -> list[str]:
     answers: list[str] = []
     for i, q in enumerate(questions):
         st.markdown(f"**Q{i + 1}.** {q.question}")
-        choice = st.radio(
-            f"Select your answer for Q{i + 1}:",
-            options=q.options,
-            key=f"quiz_q_{i}",
+        answer = st.radio(
+            f"Select answer for Q{i + 1}",
+            q.options,
             index=None,
+            key=f"quiz_answer_{i}",
+            label_visibility="collapsed",
         )
-        answers.append(choice if choice else "")
-        st.divider()
+        answers.append(answer or "")
     return answers
 
 
 def _display_quiz_results(result: dict) -> None:
-    """Display evaluation results: score, feedback, weak areas, next steps."""
-    score = result.get("score", 0.0)
-    explanations = result.get("explanations", [])
-    weak_areas = result.get("weak_areas", [])
-    next_steps = result.get("suggested_next_steps", [])
-    quiz_result = result.get("quiz_result")
+    """Display quiz evaluation results with score and feedback."""
+    score = result.get("score", 0)
+    total = result.get("total_questions", 0)
+    correct = result.get("correct_count", 0)
 
-    if quiz_result:
-        st.subheader(f"📊 Score: {quiz_result.correct_count}/{quiz_result.total_questions} ({quiz_result.score_percent}%)")
-        st.markdown(quiz_result.feedback)
-    else:
-        st.subheader(f"📊 Score: {score:.0f}%")
+    st.markdown(f"### Score: {score:.0f}% ({correct}/{total})")
 
-    if explanations:
-        st.markdown("### Per-Question Feedback")
-        for exp in explanations:
-            st.markdown(exp)
+    per_question = result.get("per_question_feedback", [])
+    for fb in per_question:
+        is_correct = fb.get("correct", False)
+        icon = "Correct" if is_correct else "Incorrect"
+        st.markdown(f"**Q{fb.get('question_number', '?')}.** {icon}")
+        if fb.get("explanation"):
+            st.caption(fb["explanation"])
 
-    if weak_areas:
-        st.markdown("### 🔴 Weak Areas")
-        for area in weak_areas:
+    weak = result.get("weak_areas", [])
+    if weak:
+        st.markdown("### Weak Areas")
+        for area in weak:
             st.markdown(f"- {area}")
 
+    next_steps = result.get("next_steps", [])
     if next_steps:
-        st.markdown("### 💡 Suggested Next Steps")
+        st.markdown("### Suggested Next Steps")
         for step in next_steps:
             st.markdown(f"- {step}")
 
     suggested_topics = result.get("suggested_topics", [])
     if suggested_topics:
-        st.markdown("### 🎯 Suggested Topics to Study Next")
+        st.markdown("### Suggested Topics to Study Next")
         for t in suggested_topics:
             st.markdown(f"- {t}")
 
 
 def render_quiz() -> None:
     """Render the Quiz section with generation, answering, and evaluation."""
-    st.header("🧠 Quiz")
+    st.header("Quiz")
     st.markdown("Test your understanding with AI-generated quiz questions.")
 
     col1, col2, col3 = st.columns(3)
@@ -447,17 +446,16 @@ def render_quiz() -> None:
             key="quiz_num_q",
         )
 
-    # Use study guide context from session if available
     study_context = ""
     last_guide = st.session_state.get("last_study_guide")
     if last_guide and hasattr(last_guide, "topic") and last_guide.topic == topic:
         study_context = last_guide.detailed_notes or last_guide.summary or ""
-        st.caption("📘 Using context from your last study guide.")
+        st.caption("Using context from your last Learn Path.")
 
-    generate = st.button("🎯 Generate Quiz", key="btn_generate_quiz")
+    generate = st.button("Generate Quiz", key="btn_generate_quiz")
 
     if generate:
-        with st.spinner("Generating quiz…"):
+        with st.spinner("Generating quiz..."):
             from src.graphs.quiz_graph import run_quiz_generation
 
             result = run_quiz_generation(
@@ -469,7 +467,7 @@ def render_quiz() -> None:
 
         error = result.get("error")
         if error:
-            st.error(f"⚠️ {error}")
+            st.error(error)
             _show_friendly_error("quiz_generation_failure")
         else:
             questions = result.get("questions", [])
@@ -479,7 +477,7 @@ def render_quiz() -> None:
                 st.session_state["quiz_eval_result"] = None
                 val_errors = result.get("validation_errors", [])
                 if val_errors:
-                    st.warning("⚠️ Quiz validation warnings: " + "; ".join(val_errors))
+                    st.warning("Quiz validation warnings: " + "; ".join(val_errors))
             else:
                 st.warning("No questions were generated. Try a different topic.")
 
@@ -488,20 +486,18 @@ def render_quiz() -> None:
         st.session_state["last_quiz_tokens"] = result.get("token_usage", {})
         _accumulate_usage_records(result.get("usage_records", []))
 
-    # Display questions if available
     questions = st.session_state.get("quiz_questions", [])
     if questions:
-        st.subheader(f"📝 Quiz: {st.session_state.get('quiz_selected_topic', topic)}")
+        st.subheader(f"Quiz: {st.session_state.get('quiz_selected_topic', topic)}")
         user_answers = _display_quiz_questions(questions)
 
-        # Warn about incomplete answers
         unanswered = sum(1 for a in user_answers if not a)
         if unanswered > 0:
-            st.caption(f"⚠️ {unanswered} question(s) unanswered — they will count as incorrect.")
+            st.caption(f"{unanswered} question(s) unanswered — they will count as incorrect.")
 
-        submit = st.button("✅ Submit Answers", key="btn_submit_quiz")
+        submit = st.button("Submit Answers", key="btn_submit_quiz")
         if submit:
-            with st.spinner("Evaluating answers…"):
+            with st.spinner("Evaluating answers..."):
                 from src.graphs.quiz_graph import run_quiz_evaluation
 
                 eval_result = run_quiz_evaluation(
@@ -514,19 +510,16 @@ def render_quiz() -> None:
             st.session_state["last_quiz_trace"] = eval_result.get("trace", [])
             st.session_state["last_quiz_tokens"] = eval_result.get("token_usage", {})
 
-    # Display evaluation results if available
     eval_result = st.session_state.get("quiz_eval_result")
     if eval_result:
         eval_error = eval_result.get("error")
         if eval_error:
-            st.error(f"⚠️ {eval_error}")
+            st.error(eval_error)
         else:
             _display_quiz_results(eval_result)
             _display_hitl_save(eval_result)
 
-        # Feedback after quiz results
         _display_feedback_widget("quiz", st.session_state.get("quiz_selected_topic", topic))
-
         _display_debug_trace(eval_result, "Quiz Evaluation Trace")
 
 
@@ -535,42 +528,40 @@ def render_quiz() -> None:
 # ---------------------------------------------------------------------------
 
 def _display_hitl_save(eval_result: dict) -> None:
-    """Show save/skip buttons for the memory candidate (HITL)."""
-    candidate = eval_result.get("memory_candidate")
-    if not candidate:
+    """Display save/skip buttons for HITL memory persistence."""
+    memory_candidate = eval_result.get("memory_candidate")
+    if not memory_candidate:
         return
 
-    st.markdown("---")
-    st.markdown("### 💾 Save this result to your learning memory?")
-    st.markdown(
-        f"**Topic:** {candidate.get('topic', 'N/A')} · "
-        f"**Score:** {candidate.get('score', 0):.0f}%"
-    )
-    weak = candidate.get("weak_areas", [])
-    if weak:
-        st.markdown("**Weak areas:** " + ", ".join(weak))
+    save_key = "hitl_saved"
+    saved = st.session_state.get(save_key)
 
-    col_save, col_skip, _ = st.columns([1, 1, 4])
-    with col_save:
-        if st.button("💾 Save", key="btn_hitl_save"):
-            try:
-                from src.memory.memory_service import save_learning_event
+    if saved is None:
+        st.markdown("---")
+        st.markdown("**Save this result to your learning memory?**")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Save", key="btn_hitl_save"):
+                try:
+                    from src.memory.memory_service import save_learning_event
 
-                save_learning_event(
-                    topic=candidate["topic"],
-                    score=candidate["score"],
-                    weak_areas=candidate.get("weak_areas", []),
-                )
-                st.session_state["hitl_saved"] = True
-            except Exception:
-                st.session_state["hitl_saved"] = "error"
-    with col_skip:
-        if st.button("⏭️ Skip", key="btn_hitl_skip"):
-            st.session_state["hitl_saved"] = False
+                    save_learning_event(
+                        topic=memory_candidate.get("topic", ""),
+                        score=memory_candidate.get("score", 0),
+                        weak_areas=memory_candidate.get("weak_areas", []),
+                        metadata={"source": "quiz_evaluation"},
+                    )
+                    st.session_state[save_key] = True
+                except Exception:
+                    st.session_state[save_key] = "error"
+                st.rerun()
+        with col2:
+            if st.button("Skip", key="btn_hitl_skip"):
+                st.session_state[save_key] = False
+                st.rerun()
 
-    saved = st.session_state.get("hitl_saved")
     if saved is True:
-        st.success("✅ Result saved to learning memory.")
+        st.success("Result saved to learning memory.")
     elif saved == "error":
         _show_friendly_error("memory_save_failure")
     elif saved is False:
@@ -578,13 +569,17 @@ def _display_hitl_save(eval_result: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Progress / Feedback
+# Progress
 # ---------------------------------------------------------------------------
 
 def render_progress() -> None:
-    """Render the Progress / Feedback section with learning memory data."""
-    st.header("📊 Progress / Feedback")
+    """Render the Progress section with learning memory data."""
+    st.header("Progress")
     st.markdown("Track your studied topics, quiz scores, weak areas, and feedback.")
+    st.info(
+        "Progress is recorded when you complete a quiz and choose **Save** "
+        "in the review step (Quiz → Submit → Save memory → Progress tracking)."
+    )
 
     from src.memory.memory_service import get_recent_topics, get_weak_areas_summary
 
@@ -592,7 +587,7 @@ def render_progress() -> None:
     if not recent:
         _show_friendly_error("empty_progress")
     else:
-        st.subheader("📋 Recent Learning Sessions")
+        st.subheader("Recent Learning Sessions")
         for evt in recent:
             weak_str = ", ".join(evt["weak_areas"]) if evt["weak_areas"] else "—"
             st.markdown(
@@ -600,7 +595,7 @@ def render_progress() -> None:
                 f"Weak areas: {weak_str} · {evt['timestamp'][:10]}"
             )
 
-        st.subheader("🔴 Weak Areas Summary")
+        st.subheader("Weak Areas Summary")
         summary = get_weak_areas_summary()
         if summary:
             for area, count in sorted(summary.items(), key=lambda x: -x[1]):
@@ -609,7 +604,7 @@ def render_progress() -> None:
             st.info("No weak areas recorded yet.")
 
     # Memory transparency
-    st.subheader("🧠 Memory Profile")
+    st.subheader("Memory Profile")
     try:
         from src.memory.memory_service import get_user_profile_summary
 
@@ -625,21 +620,24 @@ def render_progress() -> None:
             if mem.get("suggested_focus"):
                 st.markdown("**Suggested focus topics:** " + ", ".join(mem["suggested_focus"]))
         else:
-            st.info(mem["message"])
+            st.info(
+                "Memory profile will be built automatically as you study "
+                "and save quiz results."
+            )
     except Exception:
         st.info("Memory profile not available.")
 
     # Feedback section
-    st.subheader("💬 Recent Feedback")
+    st.subheader("Recent Feedback")
     from src.memory.feedback_service import get_recent_feedback, get_feedback_summary
 
     fb_entries = get_recent_feedback(limit=5)
     if fb_entries:
         for fb in fb_entries:
-            stars = "⭐" * fb["rating"]
+            stars = fb["rating"]
             comment = fb["comment"] if fb["comment"] else "—"
             st.markdown(
-                f"- {stars} **{fb['context_type']}** / {fb['topic']} — "
+                f"- Rating: {stars}/5 — **{fb['context_type']}** / {fb['topic']} — "
                 f"{comment} · {fb['timestamp'][:10]}"
             )
     else:
@@ -647,7 +645,7 @@ def render_progress() -> None:
 
     fb_summary = get_feedback_summary()
     if fb_summary.get("total_count", 0) > 0:
-        st.subheader("📈 Feedback Summary")
+        st.subheader("Feedback Summary")
         st.markdown(f"- **Average rating:** {fb_summary['average_rating']}")
         st.markdown(f"- **Total feedback entries:** {fb_summary['total_count']}")
         if fb_summary.get("suggestion"):
@@ -657,7 +655,6 @@ def render_progress() -> None:
 # ---------------------------------------------------------------------------
 # Cost tracking helpers
 # ---------------------------------------------------------------------------
-
 
 def _accumulate_usage_records(records: list[dict]) -> None:
     """Append new usage records to session-level accumulator."""
@@ -669,59 +666,62 @@ def _display_session_cost_summary() -> None:
     """Display aggregated token/cost data for the current session."""
     records = st.session_state.get("session_usage_records", [])
     if not records:
-        st.info("No usage data yet. Generate a study guide or quiz to see cost estimates.")
+        st.info("No usage data yet. Generate a Learn Path or quiz to see cost estimates.")
         return
 
     from src.services.cost_tracker import aggregate_usage
 
     summary = aggregate_usage(records)
-    st.metric("Total Tokens", f"{summary['total_tokens']:,}")
-    st.metric("Estimated Cost", f"${summary['estimated_cost_usd']:.6f}")
+    rows = "".join(
+        f"| {op['operation']} | {op['total_tokens']:,} | ${op['estimated_cost_usd']:.6f} |\n"
+        for op in summary["operations"]
+    )
+    st.markdown(
+        f"| Operation | Tokens | Est. Cost |\n"
+        f"|---|---|---|\n"
+        f"{rows}"
+        f"| **Total** | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
+    )
 
-    st.markdown("**Breakdown by operation:**")
-    for op in summary["operations"]:
-        st.markdown(
-            f"- **{op['operation']}** — {op['total_tokens']:,} tokens · "
-            f"${op['estimated_cost_usd']:.6f}"
-        )
-
-    st.markdown(f"**Total records:** {len(records)}")
+    with st.expander("Raw details"):
+        st.markdown(f"**Total records:** {len(records)}")
+        st.json(records)
 
 
 # ---------------------------------------------------------------------------
-# Advanced / Debug
+# Dashboard (formerly Advanced / Debug)
 # ---------------------------------------------------------------------------
 
 def render_advanced() -> None:
-    """Render the Advanced / Debug section."""
-    st.header("⚙️ Advanced / Debug")
+    """Render the Dashboard section."""
+    st.header("Dashboard")
     st.markdown(
-        "Inspect retrieval chunks, graph execution traces, token usage, "
-        "and application settings."
+        "Application overview, observability, cost tracking, "
+        "and workflow diagnostics."
     )
 
-    # --- Tracing status ---
-    with st.expander("🔗 LangSmith Tracing Status"):
-        from src.services.observability import format_tracing_status, get_tracing_status
+    # ── Overview ──────────────────────────────────────────────────────────
+    st.subheader("Overview")
+    from src.config import get_settings
+    from src.services.observability import format_tracing_status, get_tracing_status
 
-        status = get_tracing_status()
-        info = format_tracing_status(status)
-        st.markdown(f"**Status:** {info['status_label']}")
-        st.markdown(f"**Project:** {info['project']}")
-        st.markdown(f"**Endpoint:** {info['endpoint']}")
-        if info["has_api_key"]:
-            st.markdown("**API Key:** ✅ Configured")
-        elif any("API_KEY" in i for i in info.get("issues", [])):
-            st.warning("⚠️ LANGCHAIN_API_KEY is missing. Tracing will not work.")
-        if info["issues"]:
-            for issue in info["issues"]:
-                st.caption(f"ℹ️ {issue}")
+    settings = get_settings()
+    status = get_tracing_status()
+    info = format_tracing_status(status)
 
-    # --- Application settings ---
-    with st.expander("Application Settings"):
-        from src.config import get_settings
+    api_ok = "Configured" if settings.openai_api_key else "Missing"
+    st.markdown(
+        f"| Setting | Value |\n"
+        f"|---|---|\n"
+        f"| OpenAI API | {api_ok} |\n"
+        f"| Model | {settings.app_default_model} |\n"
+        f"| LangSmith | {info['status_label']} |\n"
+        f"| Project | {info['project']} |\n"
+        f"| Embedding | {settings.embedding_model} |\n"
+        f"| Chunk Size / Overlap | {settings.chunk_size} / {settings.chunk_overlap} |"
+    )
 
-        settings = get_settings()
+    with st.expander("All application settings"):
         st.json({
             "default_model": settings.app_default_model,
             "log_level": settings.app_log_level,
@@ -734,8 +734,62 @@ def render_advanced() -> None:
             "api_key_configured": bool(settings.openai_api_key),
         })
 
-    # --- Learn workflow trace ---
-    with st.expander("Last Learn Workflow Trace"):
+    # ── Costs ─────────────────────────────────────────────────────────────
+    st.subheader("Costs")
+    _display_session_cost_summary()
+
+    # ── Memory ────────────────────────────────────────────────────────────
+    st.subheader("Memory")
+    try:
+        from src.memory.memory_service import get_user_profile_summary
+
+        profile = get_user_profile_summary()
+        mem = format_memory_transparency(profile)
+        if mem["loaded"]:
+            avg = f"{mem['average_score']:.0f}%" if mem.get("average_score") is not None else "—"
+            weak = ", ".join(mem.get("weak_areas", [])) or "—"
+            recent = ", ".join(mem.get("recent_topics", [])) or "—"
+            focus = ", ".join(mem.get("suggested_focus", [])) or "—"
+            st.markdown(
+                f"| Field | Value |\n"
+                f"|---|---|\n"
+                f"| Average Score | {avg} |\n"
+                f"| Weak Areas | {weak} |\n"
+                f"| Recent Topics | {recent} |\n"
+                f"| Suggested Focus | {focus} |"
+            )
+        else:
+            st.info(
+                "Memory profile will be built automatically as you study "
+                "and save quiz results."
+            )
+    except Exception:
+        st.info("Memory profile not available.")
+
+    # ── Feedback ──────────────────────────────────────────────────────────
+    st.subheader("Feedback")
+    from src.memory.feedback_service import get_feedback_summary
+
+    fb_summary = get_feedback_summary()
+    if fb_summary.get("total_count", 0) > 0:
+        suggestion = fb_summary.get("suggestion", "—") or "—"
+        st.markdown(
+            f"| Field | Value |\n"
+            f"|---|---|\n"
+            f"| Average Rating | {fb_summary['average_rating']}/5 |\n"
+            f"| Total Entries | {fb_summary['total_count']} |\n"
+            f"| Suggestion | {suggestion} |"
+        )
+        with st.expander("Raw feedback details"):
+            st.json(fb_summary)
+    else:
+        st.info("No feedback data yet.")
+
+    # ── Workflow Traces ───────────────────────────────────────────────────
+    st.subheader("Workflow Traces")
+
+    # Learn trace
+    with st.expander("Learn Workflow Trace"):
         learn_result = st.session_state.get("last_learn_result", {})
         trace = learn_result.get("trace") or st.session_state.get("last_learn_trace", [])
         if trace or learn_result:
@@ -743,25 +797,24 @@ def render_advanced() -> None:
             if fields:
                 for f in fields:
                     st.markdown(f"- **{f['label']}:** {f['value']}")
-                st.markdown("---")
-            if trace:
-                for entry in trace:
-                    st.text(entry)
-            else:
-                st.info("No trace entries.")
+            tokens = learn_result.get("token_usage") or st.session_state.get("last_learn_tokens", {})
+            if tokens and tokens.get("total_tokens"):
+                st.markdown(
+                    f"**Tokens:** {tokens.get('total_tokens', 0):,} "
+                    f"(prompt: {tokens.get('prompt_tokens', 0):,}, "
+                    f"completion: {tokens.get('completion_tokens', 0):,})"
+                )
+            with st.expander("Raw trace"):
+                if trace:
+                    for entry in trace:
+                        st.text(entry)
+                else:
+                    st.info("No trace entries.")
         else:
-            st.info("No trace available yet. Generate a study guide first.")
+            st.info("No trace available yet. Generate a Learn Path first.")
 
-    # --- Learn token usage ---
-    with st.expander("Last Learn Token Usage"):
-        tokens = st.session_state.get("last_learn_tokens", {})
-        if tokens and tokens.get("total_tokens"):
-            st.json(tokens)
-        else:
-            st.info("No token usage data yet.")
-
-    # --- Quiz workflow trace ---
-    with st.expander("Last Quiz Workflow Trace"):
+    # Quiz trace
+    with st.expander("Quiz Workflow Trace"):
         quiz_gen = st.session_state.get("last_quiz_gen_result", {})
         trace = quiz_gen.get("trace") or st.session_state.get("last_quiz_trace", [])
         if trace or quiz_gen:
@@ -769,53 +822,18 @@ def render_advanced() -> None:
             if fields:
                 for f in fields:
                     st.markdown(f"- **{f['label']}:** {f['value']}")
-                st.markdown("---")
-            if trace:
-                for entry in trace:
-                    st.text(entry)
-            else:
-                st.info("No trace entries.")
+            tokens = quiz_gen.get("token_usage") or st.session_state.get("last_quiz_tokens", {})
+            if tokens and tokens.get("total_tokens"):
+                st.markdown(
+                    f"**Tokens:** {tokens.get('total_tokens', 0):,} "
+                    f"(prompt: {tokens.get('prompt_tokens', 0):,}, "
+                    f"completion: {tokens.get('completion_tokens', 0):,})"
+                )
+            with st.expander("Raw trace"):
+                if trace:
+                    for entry in trace:
+                        st.text(entry)
+                else:
+                    st.info("No trace entries.")
         else:
             st.info("No quiz trace available yet. Generate a quiz first.")
-
-    # --- Quiz token usage ---
-    with st.expander("Last Quiz Token Usage"):
-        tokens = st.session_state.get("last_quiz_tokens", {})
-        if tokens and tokens.get("total_tokens"):
-            st.json(tokens)
-        else:
-            st.info("No quiz token usage data yet.")
-
-    # --- Session cost summary ---
-    with st.expander("Session Cost Summary"):
-        _display_session_cost_summary()
-
-    # --- Memory profile ---
-    with st.expander("🧠 Memory Profile"):
-        try:
-            from src.memory.memory_service import get_user_profile_summary
-
-            profile = get_user_profile_summary()
-            mem = format_memory_transparency(profile)
-            if mem["loaded"]:
-                st.json({
-                    "recent_topics": mem["recent_topics"],
-                    "recurring_weak_areas": mem["weak_areas"],
-                    "average_score": mem["average_score"],
-                    "suggested_focus_topics": mem["suggested_focus"],
-                    "preferred_style": mem["preferred_style"],
-                })
-            else:
-                st.info(mem["message"])
-        except Exception:
-            st.info("Memory profile not available.")
-
-    # --- Feedback summary ---
-    with st.expander("Feedback Summary"):
-        from src.memory.feedback_service import get_feedback_summary
-
-        fb_summary = get_feedback_summary()
-        if fb_summary.get("total_count", 0) > 0:
-            st.json(fb_summary)
-        else:
-            st.info("No feedback data yet.")
