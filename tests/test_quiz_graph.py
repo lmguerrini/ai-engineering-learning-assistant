@@ -419,8 +419,9 @@ class TestGraphRouting:
         assert result.get("error") is not None
         assert "topic" in result["error"].lower()
 
+    @patch("src.graphs.quiz_nodes.get_cached_value", return_value=None)
     @patch("src.graphs.quiz_nodes.get_settings")
-    def test_generation_produces_questions(self, mock_settings):
+    def test_generation_produces_questions(self, mock_settings, _mock_cache):
         """Valid topic with no API key should produce fallback questions."""
         mock_settings.return_value = MagicMock(openai_api_key="")
         result = run_quiz_generation(topic="AI Agents", num_questions=5)

@@ -48,7 +48,10 @@ def _display_sources_section(guide: StudyGuide) -> None:
     st.markdown(f"### 📚 Sources — {format_sources_summary(sources)}")
 
     if not sources:
-        _show_friendly_error("no_sources")
+        st.info(
+            "ℹ️ No sources found. If the KB has not been ingested yet, "
+            "run the ingestion pipeline first, then try again."
+        )
         return
 
     for src in sources:
@@ -390,7 +393,7 @@ def render_quiz() -> None:
             questions = result.get("questions", [])
             if questions:
                 st.session_state["quiz_questions"] = questions
-                st.session_state["quiz_topic"] = topic
+                st.session_state["quiz_selected_topic"] = topic
                 st.session_state["quiz_eval_result"] = None
                 val_errors = result.get("validation_errors", [])
                 if val_errors:
@@ -406,7 +409,7 @@ def render_quiz() -> None:
     # Display questions if available
     questions = st.session_state.get("quiz_questions", [])
     if questions:
-        st.subheader(f"📝 Quiz: {st.session_state.get('quiz_topic', topic)}")
+        st.subheader(f"📝 Quiz: {st.session_state.get('quiz_selected_topic', topic)}")
         user_answers = _display_quiz_questions(questions)
 
         # Warn about incomplete answers
@@ -420,7 +423,7 @@ def render_quiz() -> None:
                 from src.graphs.quiz_graph import run_quiz_evaluation
 
                 eval_result = run_quiz_evaluation(
-                    topic=st.session_state.get("quiz_topic", topic),
+                    topic=st.session_state.get("quiz_selected_topic", topic),
                     questions=questions,
                     user_answers=user_answers,
                 )
@@ -440,7 +443,7 @@ def render_quiz() -> None:
             _display_hitl_save(eval_result)
 
         # Feedback after quiz results
-        _display_feedback_widget("quiz", st.session_state.get("quiz_topic", topic))
+        _display_feedback_widget("quiz", st.session_state.get("quiz_selected_topic", topic))
 
         _display_debug_trace(eval_result, "Quiz Evaluation Trace")
 

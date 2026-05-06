@@ -249,12 +249,28 @@ def _build_prompt(state: LearningState) -> str:
 
 
 def _parse_study_guide(raw: str, state: LearningState) -> StudyGuide:
-    """Parse the LLM output into a StudyGuide, with fallback."""
+    """Parse the LLM output into a StudyGuide, with fallback.
+
+    Always populates sources from retrieved_docs so the guide carries
+    real provenance information regardless of what the LLM returned.
+    """
     text = raw.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
     data = json.loads(text)
+
+    # Build sources from retrieved docs (authoritative) instead of relying
+    # on whatever the LLM chose to include in its JSON output.
+    docs: list[Document] = state.get("retrieved_docs", [])
+    if docs:
+        sources = []
+        for doc in docs[:5]:
+            title = doc.metadata.get("topic", doc.metadata.get("filename", "source"))
+            meta = {k: str(v) for k, v in doc.metadata.items() if k in ("filename", "source", "topic", "source_type")}
+            sources.append(Source(title=title, content_snippet=doc.content[:200], relevance_score=0.5, metadata=meta))
+        data["sources"] = [s.model_dump() for s in sources]
+
     return StudyGuide(**data)
 
 

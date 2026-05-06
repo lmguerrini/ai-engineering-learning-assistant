@@ -325,9 +325,10 @@ class TestLearnWorkflowRouting:
         assert result.get("error") is not None
         assert "topic" in result["error"].lower()
 
+    @patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
     @patch("src.graphs.learn_nodes.retrieve_documents")
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_fallback_guide_has_sources(self, mock_settings, mock_retrieve):
+    def test_fallback_guide_has_sources(self, mock_settings, mock_retrieve, _mock_cache):
         """Fallback guide includes source information from retrieved docs."""
         mock_settings.return_value = MagicMock(openai_api_key="")
         docs = _make_docs(3, content_len=200)
