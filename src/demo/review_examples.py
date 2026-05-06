@@ -19,6 +19,7 @@ class DemoExample:
     features_exercised: list[str]
     difficulty: str = "intermediate"
     response_style: str = "detailed"
+    learning_mode: str = "Topic"
 
 
 DEMO_EXAMPLES: list[DemoExample] = [
@@ -35,6 +36,7 @@ DEMO_EXAMPLES: list[DemoExample] = [
             "Agentic RAG source assessment",
         ],
         difficulty="intermediate",
+        learning_mode="Topic",
     ),
     DemoExample(
         title="Agentic RAG",
@@ -50,6 +52,7 @@ DEMO_EXAMPLES: list[DemoExample] = [
             "Multi-attempt retrieval",
         ],
         difficulty="advanced",
+        learning_mode="Topic",
     ),
     DemoExample(
         title="Long-Term Memory and HITL",
@@ -65,6 +68,7 @@ DEMO_EXAMPLES: list[DemoExample] = [
             "HITL save/skip",
         ],
         difficulty="intermediate",
+        learning_mode="Topic",
     ),
     DemoExample(
         title="RAG Evaluation",
@@ -79,6 +83,7 @@ DEMO_EXAMPLES: list[DemoExample] = [
             "Official docs fallback",
         ],
         difficulty="advanced",
+        learning_mode="Topic",
     ),
     DemoExample(
         title="Official Docs Fallback",
@@ -93,6 +98,7 @@ DEMO_EXAMPLES: list[DemoExample] = [
             "Source metadata transparency",
         ],
         difficulty="beginner",
+        learning_mode="Topic",
     ),
 ]
 

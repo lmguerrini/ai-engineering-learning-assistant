@@ -18,7 +18,7 @@ class ResponseStyle(str, Enum):
 
     CONCISE = "concise"
     DETAILED = "detailed"
-    EXAMPLES_HEAVY = "examples_heavy"
+    EXAMPLES_HEAVY = "examples-heavy"
 
 
 class TopicRequest(BaseModel):

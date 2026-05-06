@@ -102,25 +102,52 @@ def retrieve_sources(state: LearningState) -> dict:
     """Retrieve relevant documents from the knowledge base.
 
     First retrieves from the curated KB, then uses official docs
-    as fallback/enrichment if curated results are insufficient.
+    as fallback/enrichment.  For Deep Study (DETAILED style), official
+    docs are always merged to enrich technical precision.
     """
     trace = list(state.get("trace", []))
     attempts = state.get("attempts", 0) + 1
     query = state.get("query", state.get("topic", ""))
+    style = state.get("style", ResponseStyle.CONCISE)
+    is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
     trace.append(f"retrieve_sources: query='{query}' (attempt {attempts})")
 
     curated_docs = retrieve_documents(query=query, top_k=6)
     trace.append(f"retrieve_sources: got {len(curated_docs)} curated chunks")
 
-    docs = retrieve_with_fallback(
-        query=query,
-        curated_docs=curated_docs,
-        min_sources=_MIN_SOURCES,
-        min_content_chars=_MIN_CONTENT_CHARS,
-    )
-    official_count = len(docs) - len(curated_docs)
-    if official_count > 0:
-        trace.append(f"retrieve_sources: added {official_count} official doc chunks as fallback")
+    if is_deep:
+        # Deep Study: always enrich with official docs regardless of sufficiency
+        from src.kb.official_docs import retrieve_official_docs
+
+        official_docs = retrieve_official_docs(query=query, top_k=4)
+        curated_count = len(curated_docs)
+        # Merge curated (primary) + official (enrichment), dedup by content
+        seen_content = {d.content[:100] for d in curated_docs}
+        official_added = 0
+        for od in official_docs:
+            if od.content[:100] not in seen_content:
+                curated_docs.append(od)
+                seen_content.add(od.content[:100])
+                official_added += 1
+        trace.append(
+            f"retrieve_sources: Deep Study — curated={curated_count}, "
+            f"official_retrieved={len(official_docs)}, "
+            f"official_added={official_added}, "
+            f"final={len(curated_docs)}"
+        )
+        docs = curated_docs
+    else:
+        # Summary: use official docs only as fallback when curated is insufficient
+        docs = retrieve_with_fallback(
+            query=query,
+            curated_docs=curated_docs,
+            min_sources=_MIN_SOURCES,
+            min_content_chars=_MIN_CONTENT_CHARS,
+        )
+        official_count = len(docs) - len(curated_docs)
+        if official_count > 0:
+            trace.append(f"retrieve_sources: added {official_count} official doc chunks as fallback")
+
     trace.append(f"retrieve_sources: total {len(docs)} chunks")
     return {"retrieved_docs": docs, "attempts": attempts, "trace": trace}
 
@@ -216,11 +243,67 @@ def _build_prompt(state: LearningState) -> str:
         title = doc.metadata.get("topic", doc.metadata.get("filename", f"source_{i}"))
         sources_text += f"\n--- Source {i}: {title} ---\n{doc.content}\n"
 
-    style_instruction = {
-        ResponseStyle.CONCISE: "Be concise and to the point.",
-        ResponseStyle.DETAILED: "Be thorough and detailed.",
-        ResponseStyle.EXAMPLES_HEAVY: "Use many practical examples.",
-    }.get(style, "Be thorough and detailed.")
+    is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
+
+    if is_deep:
+        style_instruction = (
+            "Produce a comprehensive, academic-quality Learn Path.\n"
+            "Structure the output with clearly separated Markdown sections:\n"
+            "1. Overview\n"
+            "2. Conceptual Explanation\n"
+            "3. Architecture / Implementation Details\n"
+            "4. Practical Examples (include code in ```python blocks when relevant)\n"
+            "5. Common Mistakes\n"
+            "6. When to Use / When Not to Use\n"
+            "7. Review Checklist (5-8 verification items)\n"
+            "8. Summary Table (Markdown table comparing key aspects)\n\n"
+            "Each section must be substantial. Do not write shallow one-liners.\n"
+            "Include concrete code examples where the topic involves implementation.\n"
+            "Use proper Markdown formatting throughout."
+        )
+    else:
+        style_instruction = (
+            "Be concise and schematic. Provide a short summary-level Learn Path.\n"
+            "Use bullet points for key points.\n"
+            "Optionally include a compact Markdown table comparing key aspects.\n"
+            "Do not include a long Table of Contents or large examples.\n"
+            "Each key concept should be one sentence max."
+        )
+
+    difficulty_instruction = ""
+    if difficulty == DifficultyLevel.ADVANCED:
+        difficulty_instruction = (
+            "\nAdvanced-level requirements:\n"
+            "- Discuss architecture tradeoffs and design decisions.\n"
+            "- Cover implementation concerns and edge cases.\n"
+            "- Include production considerations (scaling, error handling, monitoring).\n"
+            "- Address observability and testing where relevant.\n"
+            "- Mention security or reliability notes when applicable.\n"
+            "- Assume the reader already knows the basics.\n"
+        )
+    elif difficulty == DifficultyLevel.BEGINNER:
+        difficulty_instruction = (
+            "\nBeginner-level requirements:\n"
+            "- Explain every concept from first principles.\n"
+            "- Avoid jargon without defining it first.\n"
+            "- Use simple analogies where helpful.\n"
+        )
+
+    # Learn Path mode produces broader multi-topic curriculum;
+    # Topic mode is focused on a single subject.
+    is_learn_path = ":" in topic and len(topic) > 60
+    if is_learn_path:
+        mode_instruction = (
+            "This is a LEARN PATH — a guided multi-topic curriculum.\n"
+            "Cover ALL listed sub-topics with dedicated sections for each.\n"
+            "Structure the output like a course module, not a single-topic answer.\n"
+            "Provide broader coverage and more material than a single-topic study.\n"
+        )
+    else:
+        mode_instruction = (
+            "This is a TOPIC study — a focused deep-dive into one subject.\n"
+            "Stay focused on this single topic and cover it thoroughly.\n"
+        )
 
     memory_context = _build_memory_context(state)
     personalization = ""
@@ -228,20 +311,24 @@ def _build_prompt(state: LearningState) -> str:
         personalization = f"\nPersonalization context:\n{memory_context}\n"
 
     return (
-        f"You are an AI Engineering tutor. Generate a structured study guide "
+        f"You are an AI Engineering tutor. Generate a structured Learn Path "
         f"on the topic '{topic}' at {difficulty.value} level.\n\n"
+        f"{mode_instruction}\n"
         f"Style: {style_instruction}\n"
+        f"{difficulty_instruction}\n"
         f"{personalization}\n"
-        f"Use ONLY the following sources to build the guide. "
+        f"Use ONLY the following sources to build the Learn Path. "
         f"Do not invent information beyond what is in the sources.\n"
         f"{sources_text}\n\n"
+        f"For key_concepts, provide each concept with a one-sentence explanation "
+        f"separated by a colon, e.g. 'Concept Name: Brief explanation of the concept.'\n\n"
         f"Respond with valid JSON matching this schema:\n"
         f'{{\n'
         f'  "topic": "{topic}",\n'
         f'  "difficulty": "{difficulty.value}",\n'
         f'  "summary": "2-4 sentence overview",\n'
-        f'  "key_concepts": ["concept1", "concept2", ...],\n'
-        f'  "detailed_notes": "multi-paragraph markdown notes",\n'
+        f'  "key_concepts": ["Concept: explanation", ...],\n'
+        f'  "detailed_notes": "multi-paragraph markdown notes with subsections",\n'
         f'  "sources": [{{"title": "...", "content_snippet": "...", "relevance_score": 0.9}}]\n'
         f'}}\n\n'
         f"Return ONLY the JSON object, no extra text."

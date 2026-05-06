@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -20,16 +21,47 @@ def format_source_display(source: Any) -> dict:
         meta_items.append(("Topic", metadata["topic"]))
     if metadata.get("filename"):
         meta_items.append(("File", metadata["filename"]))
+    if metadata.get("source_type"):
+        meta_items.append(("Type", metadata["source_type"]))
     if metadata.get("source"):
         meta_items.append(("Source", metadata["source"]))
 
     return {
         "title": title,
-        "snippet": snippet if snippet else "_No preview available._",
+        "snippet": _sanitize_snippet(snippet) if snippet else "_No preview available._",
         "relevance": relevance,
         "relevance_label": f"{relevance:.1f}" if relevance > 0 else "N/A",
         "metadata_items": meta_items,
     }
+
+
+def _sanitize_snippet(text: str) -> str:
+    """Strip markdown headings, single-letter artifacts, and collapse whitespace."""
+    # Remove markdown heading markers (# ## ### etc.)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove stray single-letter lines (e.g. lone "O")
+    text = re.sub(r"^[A-Z]\n", "", text, flags=re.MULTILINE)
+    # Remove stray single letters surrounded by whitespace mid-text
+    text = re.sub(r"(?<=\s)[A-Z](?=\s)", "", text)
+    # Collapse multiple blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    # Collapse multiple spaces
+    text = re.sub(r"  +", " ", text)
+    return text.strip()
+
+
+def deduplicate_sources(sources: list) -> list:
+    """Deduplicate sources by filename, keeping the first occurrence."""
+    seen: set[str] = set()
+    unique: list = []
+    for src in sources:
+        meta = getattr(src, "metadata", {}) or {}
+        key = meta.get("filename", "") or getattr(src, "title", "")
+        if key and key in seen:
+            continue
+        seen.add(key)
+        unique.append(src)
+    return unique
 
 
 def format_sources_summary(sources: list) -> str:
@@ -37,7 +69,22 @@ def format_sources_summary(sources: list) -> str:
     count = len(sources) if sources else 0
     if count == 0:
         return "No sources used."
-    return f"{count} source(s) used."
+    if count == 1:
+        return "1 source used."
+    return f"{count} sources used."
+
+
+def downgrade_headings(text: str) -> str:
+    """Downgrade Markdown heading levels by one step in generated content.
+
+    # -> ##, ## -> ###, etc.  Prevents oversized headings in rendered Learn output.
+    """
+    # Process from h5 down to h1 so replacements don't collide.
+    for level in range(5, 0, -1):
+        pattern = re.compile(r"^" + "#" * level + r"\s", re.MULTILINE)
+        replacement = "#" * (level + 1) + " "
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def format_trace_entry(entry: str) -> str:
@@ -58,12 +105,12 @@ def format_graph_state_summary(result: dict) -> list[dict]:
     difficulty = result.get("difficulty")
     if difficulty:
         val = difficulty.value if hasattr(difficulty, "value") else str(difficulty)
-        fields.append({"label": "Level / Difficulty", "value": val})
+        fields.append({"label": "Learn Path", "value": val})
 
     style = result.get("style")
     if style:
         val = style.value if hasattr(style, "value") else str(style)
-        fields.append({"label": "Response Style", "value": val})
+        fields.append({"label": "Learning Depth", "value": val})
 
     docs = result.get("retrieved_docs", [])
     fields.append({"label": "Sources Retrieved", "value": str(len(docs))})
@@ -95,7 +142,7 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
     if not memory_profile:
         return {
             "loaded": False,
-            "message": "No memory profile available. Complete quizzes and save results to build your profile.",
+            "message": "Memory profile will be built automatically as you study and save quiz results.",
         }
 
     return {
@@ -158,5 +205,5 @@ def format_error_message(error_type: str) -> dict:
         "icon": "⚠️",
         "title": "Something Went Wrong",
         "message": "An unexpected error occurred.",
-        "suggestion": "Try again or check the Advanced/Debug section for details.",
+        "suggestion": "Try again or check the Dashboard section for details.",
     })

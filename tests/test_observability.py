@@ -218,8 +218,11 @@ class TestFormatSourcesSummary:
         assert format_sources_summary([]) == "No sources used."
         assert format_sources_summary(None) == "No sources used."
 
+    def test_single_source(self):
+        assert format_sources_summary(["a"]) == "1 source used."
+
     def test_with_sources(self):
-        assert format_sources_summary(["a", "b", "c"]) == "3 source(s) used."
+        assert format_sources_summary(["a", "b", "c"]) == "3 sources used."
 
 
 class TestFormatGraphStateSummary:
