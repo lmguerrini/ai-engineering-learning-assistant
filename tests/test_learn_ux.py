@@ -470,7 +470,7 @@ class TestDashboardStructure:
     """Dashboard should have visible sections, not all expanders."""
 
     def test_dashboard_has_subheaders(self):
-        with open("src/ui/pages.py") as f:
+        with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         # Dashboard should use st.subheader for main sections
         assert "st.subheader(\"Overview\")" in source
