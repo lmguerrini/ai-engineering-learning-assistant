@@ -24,6 +24,15 @@
 
 Scores range from `0.0` to `1.0` (higher is better).
 
+**Metric details**:
+
+- **Faithfulness**: Decomposes the answer into claims and checks each against the context. Score = (supported claims) / (total claims). A score of 0.0 means the answer is entirely hallucinated.
+- **Answer Relevancy**: Generates hypothetical questions from the answer and measures cosine similarity to the original question. Low scores indicate the answer is off-topic or too generic.
+- **Context Precision**: Measures whether the most relevant context items are ranked higher. Uses ground truth to determine relevance. Important when context window is limited.
+- **Context Recall**: Checks if all claims in the ground truth can be attributed to the retrieved contexts. Low recall means the retriever missed important information.
+
+> **Caveat**: Faithfulness and Answer Relevancy use an LLM as judge — results may vary across models and runs. Use a consistent judge model for comparable evaluations.
+
 ### Evaluation Dataset
 
 Each evaluation sample requires:
@@ -53,8 +62,10 @@ eval_data = {
 dataset = Dataset.from_dict(eval_data)
 ```
 
-- `ground_truth` is required for `context_recall` but optional for other metrics.
+- `ground_truth` is required for `context_recall` and `context_precision` but optional for `faithfulness` and `answer_relevancy`.
 - Minimum 20–50 samples recommended for statistically meaningful evaluation.
+- Questions should cover diverse topics, difficulty levels, and edge cases.
+- Include adversarial examples (unanswerable questions, ambiguous queries) to test robustness.
 
 ### Running Evaluation
 
@@ -73,6 +84,26 @@ df = result.to_pandas()  # per-sample breakdown
 
 - Evaluation requires an LLM for judging (uses OpenAI by default).
 - Run evaluations offline — not in the hot path of user requests.
+- Each evaluation sample costs LLM tokens for judging — budget for evaluation API costs.
+
+**Configuring the judge LLM**:
+
+```python
+from ragas.llms import LangchainLLMWrapper
+from langchain_openai import ChatOpenAI
+
+judge_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini", temperature=0))
+
+result = evaluate(
+    dataset=dataset,
+    metrics=[faithfulness, answer_relevancy],
+    llm=judge_llm,  # explicit judge model
+)
+```
+
+- Use `temperature=0` for the judge LLM to maximize evaluation consistency.
+- `gpt-4o-mini` is cost-effective for judging; `gpt-4o` may be more accurate for complex assessments.
+- The judge LLM processes each sample independently — no cross-sample contamination.
 
 ### Custom Metrics
 
@@ -90,14 +121,95 @@ class FilenameMatchMetric(Metric):
 
 - Extend `Metric` base class with a `score` method.
 - Supports LLM-based or deterministic scoring.
+- Custom metrics are useful for domain-specific evaluation (e.g., filename matching, keyword presence).
+
+## Advanced Patterns
+
+### Interpreting Evaluation Results
+
+```python
+df = result.to_pandas()
+
+# Find worst-performing samples
+low_faith = df[df["faithfulness"] < 0.5]
+print(f"{len(low_faith)} samples with low faithfulness (hallucination risk)")
+
+# Correlation analysis: do retrieval issues cause answer issues?
+import numpy as np
+corr = np.corrcoef(df["context_recall"], df["faithfulness"])[0, 1]
+print(f"Correlation between context_recall and faithfulness: {corr:.2f}")
+```
+
+**Diagnostic patterns**:
+
+| Metric Pattern | Diagnosis | Recommended Fix |
+|---------------|-----------|----------------|
+| Low faithfulness, high context recall | LLM ignoring context (hallucinating despite good retrieval) | Improve prompt to emphasize grounding; lower temperature |
+| High faithfulness, low answer relevancy | Answer is grounded but doesn't address the question | Improve prompt to focus on the question; refine query |
+| Low context recall, low faithfulness | Retriever missing relevant documents | Improve retrieval (better embeddings, more KB content, query refinement) |
+| Low context precision, high context recall | Too many irrelevant documents retrieved | Reduce `n_results`; add distance threshold filtering |
+
+### Evaluation Pipeline Automation
+
+```python
+import json
+from datetime import datetime
+
+def run_eval_pipeline(chain, dataset, output_path: str):
+    """Run evaluation and save results with metadata."""
+    result = evaluate(
+        dataset=dataset,
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
+    )
+    
+    report = {
+        "timestamp": datetime.now().isoformat(),
+        "aggregate": {k: float(v) for k, v in result.items()},
+        "sample_count": len(dataset),
+        "per_sample": result.to_pandas().to_dict(orient="records"),
+    }
+    
+    with open(output_path, "w") as f:
+        json.dump(report, f, indent=2)
+    
+    return report
+```
+
+- Save evaluation reports with timestamps for trend tracking.
+- Integrate into CI/CD: fail builds if metrics drop below thresholds.
+- Track metrics over time to detect regressions.
+
+### Evaluation Without Ground Truth
+
+When ground truth is unavailable, use reference-free metrics:
+
+- **Faithfulness**: Does the answer stick to what’s in the retrieved context? (no ground truth needed)
+- **Answer Relevancy**: Does the answer address the original question? (no ground truth needed)
+- **Aspect Critique**: LLM-judged aspects like harmfulness, coherence, conciseness.
+
+These metrics enable continuous monitoring of production outputs without manual labeling.
 
 ## Practical Implementation Notes
 
-- Start with `faithfulness` and `answer_relevancy` as baseline metrics.
+- Start with `faithfulness` and `answer_relevancy` as baseline metrics — they don’t require ground truth.
 - Create evaluation datasets from real user queries when possible.
 - Run evaluations offline, not in the hot path of user requests.
 - Compare metrics before and after RAG pipeline changes to measure impact.
 - Use deterministic metrics (e.g., filename matching) for quick automated CI checks.
+- Budget for evaluation cost: each sample requires 1–3 LLM calls for judging.
+- Version your evaluation datasets — changing the dataset invalidates historical comparisons.
+- Aim for 80%+ faithfulness and 70%+ answer relevancy as production baselines.
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `ImportError: ragas` | RAGAs not installed | `pip install ragas`; note: requires `datasets` and `langchain` |
+| All scores are 0.0 | Empty contexts or answers in dataset | Verify dataset fields are non-empty strings/lists |
+| Inconsistent scores across runs | Non-zero temperature on judge LLM | Set `temperature=0` on the judge model |
+| `context_recall` errors | Missing `ground_truth` field in dataset | Add `ground_truth` column; or remove `context_recall` from metrics |
+| Very slow evaluation | Large dataset + expensive judge model | Use `gpt-4o-mini` for judging; reduce dataset size for iteration |
+| `KeyError` on dataset columns | Column names don’t match expected schema | RAGAs expects `question`, `answer`, `contexts`, `ground_truth` |
 
 ## Common Mistakes
 
@@ -106,6 +218,9 @@ class FilenameMatchMetric(Metric):
 - Running RAGAs evaluation in production request paths (adds latency and cost).
 - Ignoring `context_precision` — high recall but low precision means noisy retrieval.
 - Using only aggregate scores without inspecting per-sample failures.
+- Changing the evaluation dataset between comparisons — invalidates before/after analysis.
+- Not pinning the judge model version — model updates change evaluation baselines.
+- Treating RAGAs scores as absolute quality measures — they are relative and best used for comparison.
 
 ## Related Project Usage
 
