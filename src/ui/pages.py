@@ -7,6 +7,7 @@ import streamlit as st
 from src.ui.shared import (  # noqa: F401
     LEARN_TOPICS,
     _DEPTH_TO_STYLE,
+    _LEARN_PATH_DISPLAY_NAMES,
     _LEARN_PATH_LABELS,
     _LEARN_PATH_TO_ENUM,
     _LEARN_PATH_TOPIC_MAP,
