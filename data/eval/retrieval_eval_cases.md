@@ -214,7 +214,106 @@ Expected:
 
 ---
 
-## 9. Edge Cases
+## 9. LLM Fundamentals
+
+Query:
+"What are the main limitations of large language models?"
+
+Expected:
+- llm_basics.md
+
+---
+
+Query:
+"How does the Transformer architecture work?"
+
+Expected:
+- llm_basics.md
+
+---
+
+## 10. Development Environment
+
+Query:
+"How to set up a Python development environment for AI applications?"
+
+Expected:
+- dev_environment_apis.md
+
+---
+
+Query:
+"How to manage API keys securely in AI projects?"
+
+Expected:
+- dev_environment_apis.md
+
+---
+
+## 11. RAG and LangChain Integration
+
+Query:
+"How to integrate RAG with LangChain?"
+
+Expected:
+- rag_langchain_integration.md
+
+---
+
+Query:
+"What are LangChain document loaders and text splitters?"
+
+Expected:
+- rag_langchain_integration.md
+- langchain_chains.md
+
+---
+
+## 12. Prompt Evaluation and Benchmarks
+
+Query:
+"How to evaluate prompt quality and LLM outputs?"
+
+Expected:
+- prompt_evaluation_benchmarks.md
+
+---
+
+Query:
+"What benchmarks exist for evaluating LLM performance?"
+
+Expected:
+- prompt_evaluation_benchmarks.md
+
+---
+
+## 13. Official Docs Fallback
+
+Query:
+"Pydantic validation and settings configuration patterns"
+
+Expected:
+- No relevant documents (triggers official docs fallback)
+
+---
+
+Query:
+"Streamlit session state management and caching"
+
+Expected:
+- No relevant documents (triggers official docs fallback)
+
+---
+
+Query:
+"RAGAs faithfulness and answer relevancy metrics"
+
+Expected:
+- No relevant documents (triggers official docs fallback)
+
+---
+
+## 14. Edge Cases
 
 Query:
 "Explain quantum computing"
