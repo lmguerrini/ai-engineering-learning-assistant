@@ -232,6 +232,17 @@ A client connects over Streamable HTTP and invokes those tools through the MCP p
 - **Confusing curated with verified**
   - Directory listings do not guarantee security auditing.
 
+## Best Practices
+
+- Write clear, specific tool descriptions — the model uses them to decide when and how to call tools.
+- Define strict input schemas with types, constraints, and descriptions for every parameter.
+- Include "no tool expected" test cases in evaluation datasets to catch over-eager tool use.
+- Use checkpointers for any multi-turn application; start with `InMemorySaver` for development, then migrate to `SqliteSaver` or `PostgresSaver` for production.
+- Log every tool call with input arguments, output, and latency for debugging and audit trails.
+- Validate tool outputs before returning them to the model — malformed results cause cascading errors.
+- Prefer MCP when tools must be shared across multiple AI applications; use direct tool binding for internal-only tools.
+- Test tool-calling agents with automated evaluation datasets, not just manual spot checks.
+
 ## Related Concepts
 
 - Prompt Evaluation  

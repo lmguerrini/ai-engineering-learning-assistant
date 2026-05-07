@@ -655,6 +655,17 @@ Use it when it provides real control, not just because it is more advanced.
 - too many unnecessary state fields
 - uncontrolled side effects
 
+## Best Practices
+
+- Start with `create_agent` for standard tool-calling loops; switch to LangGraph only when you need custom branching, loops, or explicit state control.
+- Keep nodes small and focused — one node, one responsibility.
+- Use `TypedDict` or Pydantic for state schemas to get type safety and documentation.
+- Define reducers explicitly for any list or accumulator field to prevent accidental overwrites.
+- Always set `max_attempts` and fallback nodes for any workflow containing loops or retries.
+- Use conditional edges for deterministic routing; avoid hiding routing decisions inside LLM prompts.
+- Enable LangSmith tracing during development to inspect node execution, state changes, and branching decisions.
+- Test nodes independently with mocked state before testing the full graph.
+
 ## Related Concepts
 
 - AI Agents
@@ -670,3 +681,5 @@ Use it when it provides real control, not just because it is more advanced.
 - Checkpointers
 - Human-in-the-Loop
 - LangSmith
+- Production Agent Patterns
+- Middleware and Guardrails

@@ -213,4 +213,6 @@ LLMs are a key building block for modern AI applications such as assistants, RAG
 - LLM Limitations  
 - AI Ethics and Bias  
 - Context Windows and Token Management  
-- Model Selection and Cost Optimization
+- Model Selection and Cost Optimization  
+- Prompt Engineering  
+- Function Calling and Tool Use

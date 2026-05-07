@@ -149,6 +149,15 @@ User follow-up:
 
 The agent answers using persisted structured state.
 
+### Middleware Chain Example
+A customer service agent with layered middleware:
+
+1. `before_agent`: authenticate user, load subscription tier from database
+2. `before_model`: trim message history to last 20 messages, inject user preferences
+3. `wrap_tool_call`: check if tool is authorized for user tier, log call to audit trail
+4. `after_model`: scan output for PII, validate response format
+5. `after_agent`: record response latency, update analytics dashboard
+
 ## When to Use
 
 - **Custom Agent State**
@@ -200,6 +209,20 @@ The agent answers using persisted structured state.
 - **Ignoring middleware order**
   - Hook order affects behavior and correctness.
 
+- **No error handling in tools**
+  - Tools that throw unhandled exceptions crash the agent loop. Always return structured error responses.
+
+## Best Practices
+
+- Extend `AgentState` with domain-specific fields early — retrofitting state later is harder.
+- Use `ToolRuntime` to give tools safe read access to state without exposing internals in tool schemas.
+- Use `Command(update={...})` for controlled state mutations from tools instead of direct state manipulation.
+- Start with `InMemorySaver` for development, then migrate to `SqliteSaver` or `PostgresSaver` for production persistence.
+- Layer middleware in the correct order: authentication → validation → execution → output checking → logging.
+- Always include error handling in tools — return structured error responses instead of raising exceptions.
+- Test middleware hooks independently with unit tests before combining them.
+- Log every state mutation and tool call for debugging and audit compliance.
+
 ## Related Concepts
 
 - AI Agents  
@@ -212,3 +235,5 @@ The agent answers using persisted structured state.
 - Human-in-the-Loop  
 - PII Redaction  
 - Production Agent Reliability  
+- Error Handling and Retries  
+- Observability and Tracing  

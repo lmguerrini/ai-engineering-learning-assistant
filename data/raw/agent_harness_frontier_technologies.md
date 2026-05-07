@@ -503,6 +503,19 @@ Use only when justified.
 
 ---
 
+## Best Practices
+
+- Treat the harness as the primary engineering investment — model improvements alone do not make agents production-ready.
+- Implement context engineering (summarization, selective injection, structured memory) to prevent context drift and overflow.
+- Persist state with checkpoints so agents can recover from crashes, API errors, and session interruptions.
+- Validate and sanitize every tool call input and output — agents can hallucinate malformed or dangerous commands.
+- Use agent-level permissions (not just tool-level) to enforce least-privilege access control.
+- Implement doom loop detection: interrupt execution after N identical consecutive tool calls.
+- Design for graceful degradation — if a tool fails, the agent should fall back, not crash.
+- Log all tool calls, state transitions, and routing decisions for debugging and security auditing.
+
+---
+
 ## Related Concepts
 
 - Long-term memory systems
@@ -513,3 +526,6 @@ Use only when justified.
 - Middleware and guardrails
 - Multi-agent systems
 - Observability and tracing
+- Context Engineering
+- Doom Loop Detection
+- Agent-Centric Permissions

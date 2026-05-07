@@ -134,6 +134,11 @@ The LLM uses this context to produce a grounded answer.
 - "How can I make my app faster?" → vector search works well
 - Medical/legal queries → hybrid search is often better
 
+### Chunking Strategy Examples
+- A 10-page technical report split into 500-character chunks with 100-character overlap
+- Markdown documents split at heading boundaries for topic-coherent chunks
+- Legal contracts split by clause or section for precise retrieval
+
 ## When to Use
 
 - **RAG**
@@ -191,6 +196,23 @@ The LLM uses this context to produce a grounded answer.
 - **Treating vector databases like normal SQL databases**
   - Vector databases are designed for similarity search and metadata filtering.
 
+- **Too large or too small chunks**
+  - Large chunks dilute relevance; small chunks lose context. Tune chunk size based on content and use case.
+
+- **No metadata on chunks**
+  - Without source, section, or page metadata, traceability and filtering are impossible.
+
+## Best Practices
+
+- Start with a small, well-curated knowledge base before scaling.
+- Use chunk overlap (e.g., 100–200 characters) to preserve context across chunk boundaries.
+- Attach metadata (source file, section heading, page number) to every chunk for traceability.
+- Test retrieval quality with representative queries before connecting generation.
+- Use cosine similarity as the default metric; switch to dot product only if embeddings are normalized.
+- Embed queries and documents with the same embedding model to ensure compatible vector spaces.
+- Monitor retrieval hit rate and relevance as the knowledge base grows.
+- Evaluate end-to-end RAG quality using faithfulness, answer relevancy, and context precision metrics.
+
 ## Related Concepts
 
 - LangChain and Chains  
@@ -203,3 +225,5 @@ The LLM uses this context to produce a grounded answer.
 - ChromaDB  
 - Augmented Generation  
 - Agentic RAG  
+- RAGAs Evaluation  
+- Document Loaders and Text Splitters  

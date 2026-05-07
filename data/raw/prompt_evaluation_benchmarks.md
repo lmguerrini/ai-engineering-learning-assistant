@@ -163,6 +163,18 @@ The judge returns structured scores and short justifications.
 - General instruction improves some detection but hurts other metrics.
 - A targeted few-shot example improves threading detection without increasing false positives.
 
+### Evaluation Dataset Structure Example
+A well-structured evaluation dataset for a code review assistant:
+
+| Input | Expected Issue | Category | Difficulty |
+|-------|---------------|----------|------------|
+| `def divide(a, b): return a / b` | Division by zero | Error handling | Easy |
+| `password = "admin123"` | Hardcoded credential | Security | Easy |
+| `def process(data): ...` (race condition) | Thread safety | Concurrency | Hard |
+| `def foo(x): return x * 2` | No issue | Negative case | Easy |
+
+Negative cases are critical for measuring false positive rate.
+
 ## When to Use
 
 - **Systematic Prompt Evaluation**
@@ -215,6 +227,17 @@ The judge returns structured scores and short justifications.
 - **Ignoring judge-model bias**
   - LLM judges can be biased toward certain styles or model families.
 
+## Best Practices
+
+- Define evaluation metrics and success thresholds before running any tests.
+- Include negative cases ("no issue expected") in every evaluation dataset to measure false positive rates.
+- Change one thing at a time when iterating on prompts — large rewrites obscure what helped.
+- Use programmatic checks (exact match, keyword, regex) when possible; reserve LLM-as-a-judge for open-ended outputs.
+- Run evaluation on at least 30–50 diverse test cases to get statistically meaningful results.
+- Track prompt versions alongside evaluation results for reproducibility.
+- Use task-specific evaluation on your actual use case — public benchmarks are useful for model selection but do not replace product-level testing.
+- When using LLM-as-a-judge, provide explicit scoring criteria and require structured output (scores + justifications).
+
 ## Related Concepts
 
 - Prompt Engineering  
@@ -227,3 +250,5 @@ The judge returns structured scores and short justifications.
 - Giskard  
 - Promptfoo  
 - LLM Benchmarks and Leaderboards  
+- Regression Testing for LLM Applications  
+- Cost-Performance Trade-offs  

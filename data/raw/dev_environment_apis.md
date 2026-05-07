@@ -233,4 +233,6 @@ The focus is on how to efficiently build, test, and deploy AI systems using mode
 - No-Code AI Platforms  
 - Privacy and Compliance  
 - Configuration Management  
-- Secret Management and Security
+- Secret Management and Security  
+- Testing and Mocking API Calls  
+- Logging and Observability

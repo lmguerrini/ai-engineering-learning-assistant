@@ -270,4 +270,6 @@ A virtual assistant remembers that a user prefers Italian cuisine and uses that 
 - Document Q&A  
 - Autonomous Agents  
 - Output Parsing and Structured Output  
-- Prompt Templates and Few-Shot Learning
+- Prompt Templates and Few-Shot Learning  
+- Production Agent Patterns  
+- Middleware and Checkpointers

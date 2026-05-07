@@ -55,8 +55,6 @@ A prompt consists of role-based messages:
 
 Because LLMs are stateless, the full conversation must be included in each request.
 
----
-
 ### 2. Prompt Design Principles
 
 Effective prompts include:
@@ -70,8 +68,6 @@ Effective prompts include:
 Prompting is iterative:
 → write → test → refine
 
----
-
 ### 3. Zero-Shot Prompting
 
 - No examples provided  
@@ -83,8 +79,6 @@ Good prompt includes:
 - format
 - constraints
 
----
-
 ### 4. Few-Shot Prompting
 
 - Includes examples of input → output  
@@ -94,8 +88,6 @@ Best practices:
 - include edge cases  
 - keep examples consistent  
 - avoid conflicting patterns  
-
----
 
 ### 5. Chain-of-Thought Prompting
 
@@ -109,8 +101,6 @@ Used for:
 
 Improves accuracy on complex tasks.
 
----
-
 ### 6. Output Types
 
 - **Free Text**  
@@ -123,8 +113,6 @@ Improves accuracy on complex tasks.
   Model returns tool name + arguments  
   → system executes  
   → result returned to model  
-
----
 
 ### 7. LLM Settings
 
@@ -147,8 +135,6 @@ Improves accuracy on complex tasks.
 - **Reasoning Effort**  
   Controls internal reasoning depth  
 
----
-
 ### 8. Prompting Workflow
 
 1. Start with a simple prompt  
@@ -156,8 +142,6 @@ Improves accuracy on complex tasks.
 3. Add constraints or examples  
 4. Adjust reasoning (if needed)  
 5. Tune settings only if necessary  
-
----
 
 ## Example
 
@@ -169,8 +153,6 @@ Bad:
 Better:
 "Write a professional email declining a meeting politely, under 50 words, and suggest email updates instead."
 
----
-
 ### Few-Shot Example
 
 Provide labeled examples:
@@ -179,8 +161,6 @@ Input → Output
 Pattern → New input  
 
 Model learns format and applies it.
-
----
 
 ### Chain-of-Thought Example
 
@@ -192,8 +172,6 @@ Model:
 - traces logic  
 - finds error  
 
----
-
 ### Function Calling Example
 
 User:
@@ -203,7 +181,15 @@ Model:
 → calls calculator function  
 → returns 20  
 
----
+### Structured Output Example
+
+Prompt:
+"Extract the product name, price, and category from this review. Return JSON."
+
+Output:
+`{"product": "Wireless Mouse", "price": 29.99, "category": "Electronics"}`
+
+This is reliable for downstream processing in pipelines and APIs.
 
 ## When to Use
 
@@ -228,8 +214,6 @@ Model:
 - **Settings Tuning**
   - creativity vs precision trade-offs  
 
----
-
 ## Common Mistakes
 
 - **Vague prompts**
@@ -253,7 +237,16 @@ Model:
 - **Using sampling instead of fixing prompt**
   → unstable results  
 
----
+## Best Practices
+
+- Start with a clear system message that defines the assistant's role, tone, and constraints.
+- Use structured output (JSON mode or Pydantic schemas) whenever the output must be parsed programmatically.
+- Include few-shot examples for tasks where format consistency matters.
+- Test prompts systematically with an evaluation dataset, not just a few manual examples.
+- Keep prompts modular: separate instructions, context, and output format for easier iteration.
+- Use chain-of-thought prompting for reasoning-heavy tasks; skip it for simple lookups.
+- Set temperature to 0 for deterministic tasks (classification, extraction) and 0.7–1.0 for creative tasks.
+- Version-control prompts alongside code to track changes and regressions.
 
 ## Related Concepts
 

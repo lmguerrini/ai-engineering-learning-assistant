@@ -120,6 +120,16 @@ A user manual can be split into sections:
 
 When a user asks about troubleshooting, the retriever can return only the relevant section.
 
+### RAG Pipeline Flow Example
+1. Load markdown files using `DirectoryLoader` with `TextLoader`
+2. Split into 500-character chunks with 100-character overlap using `RecursiveCharacterTextSplitter`
+3. Embed chunks using `OpenAIEmbeddings` (text-embedding-3-small)
+4. Store in ChromaDB with source metadata
+5. User asks: "How does RAG improve accuracy?"
+6. Retriever returns top-3 chunks from `rag_basics.md`
+7. Prompt template combines question + retrieved context
+8. LLM generates a grounded answer citing the sources
+
 ### Embedding Example
 Text chunk:
 "To reset the router, press the back button for 10 seconds."
@@ -194,6 +204,20 @@ The second answer may be true, but the relativity claim is not supported by the 
 - **Assuming RAGAs only works for Python apps**
   - RAGAs can evaluate outputs from other systems if data is exported.
 
+- **Not testing retrieval separately from generation**
+  - Retrieval failures and generation failures require different fixes. Test each stage independently.
+
+## Best Practices
+
+- Use `RecursiveCharacterTextSplitter` as a starting point; tune chunk size based on content type and retrieval results.
+- Attach source metadata (file name, section heading) to every chunk for traceability and citation.
+- Test retrieval quality independently before evaluating the full RAG pipeline.
+- Use RAGAs metrics (faithfulness, context precision, context recall, answer relevancy) for systematic evaluation.
+- When faithfulness is low, check whether the LLM is adding unsupported claims — tighten the system prompt to stay grounded.
+- When context precision is low, improve chunking or add metadata filtering to reduce noise.
+- Run evaluation on a diverse dataset that includes easy, hard, and out-of-scope queries.
+- Log retrieved chunks alongside generated answers to enable post-hoc debugging.
+
 ## Related Concepts
 
 - Retrieval-Augmented Generation (RAG)  
@@ -208,3 +232,5 @@ The second answer may be true, but the relativity claim is not supported by the 
 - Context Precision and Context Recall  
 - Answer Relevancy  
 - RAGAs  
+- Prompt Engineering for RAG  
+- Production RAG Pipelines  

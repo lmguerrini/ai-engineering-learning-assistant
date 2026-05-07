@@ -286,29 +286,36 @@ user → agent → retrieve memory → update state → respond → store new me
 
 ### Virtual Assistant
 
-- remembers user preferences
-- adapts suggestions over time
+A personal assistant remembers that a user prefers vegetarian restaurants, has a meeting every Tuesday at 10am, and dislikes email notifications.
+
+On a new session, the agent retrieves these preferences from long-term memory and uses them to personalize recommendations without asking again.
 
 ---
 
 ### Education System
 
-- tracks weak topics
-- suggests targeted exercises
+A learning assistant tracks that a student struggles with recursion and has mastered basic data structures.
+
+On the next session, it suggests recursion exercises and skips topics already covered, using memory to adapt the learning path.
 
 ---
 
 ### Customer Support
 
-- remembers past issues
-- avoids repeated explanations
+A support agent remembers that a customer reported a billing issue last week and was promised a follow-up.
+
+On the next interaction, the agent retrieves this context and proactively updates the customer instead of asking them to repeat the problem.
 
 ---
 
 ### HITL Escalation
 
-- simple queries handled automatically
-- complex cases escalated to human
+A financial agent processes routine transactions automatically but escalates when:
+- transfer amount exceeds $10,000
+- recipient is in a flagged jurisdiction
+- confidence in intent classification is below 0.8
+
+The human reviewer approves, modifies, or rejects the action, and feedback updates the agent's decision thresholds.
 
 ---
 
@@ -460,6 +467,19 @@ System should degrade gracefully if:
 - mixing state and long-term memory
 - no fallback when HITL unavailable
 - storing sensitive data without controls
+
+---
+
+## Best Practices
+
+- Separate short-term state (session-scoped) from long-term memory (persistent) in architecture and storage.
+- Use vector stores for semantic memory retrieval; use structured databases for factual records and preferences.
+- Attach metadata (timestamps, user_id, importance) to every memory entry for effective filtering and retrieval.
+- Implement memory eviction or decay strategies to prevent unbounded growth.
+- Design HITL as an optional checkpoint, not a hard dependency — the system should degrade gracefully if humans are unavailable.
+- Use HITL feedback to update memory and improve future agent behavior.
+- Encrypt stored memories and enforce access controls, especially for personal or sensitive data.
+- Test memory retrieval with diverse queries to ensure relevant memories surface and irrelevant ones are filtered.
 
 ---
 

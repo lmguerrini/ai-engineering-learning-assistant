@@ -142,6 +142,17 @@ Agentic RAG:
 - ReAct workflow with objective → goal-based agent
 - Multiple specialized workflows → multi-agent-like architecture
 
+### ReAct Loop Trace Example
+User asks: "What caused the production outage last night?"
+
+1. Reason: need to check monitoring dashboard
+2. Act: call `get_recent_alerts(service="api-gateway", hours=12)`
+3. Observe: 3 alerts found — memory spike, connection timeout, disk full
+4. Reason: disk full is likely the root cause, need details
+5. Act: call `get_disk_usage(server="prod-01")`
+6. Observe: /var/log at 98% capacity
+7. Act: generate final answer with root cause and remediation steps
+
 ## When to Use
 
 - **Pipeline**
@@ -191,6 +202,17 @@ Agentic RAG:
 
 - **Expecting human judgment**
   - Agents may miss ethical nuance or hidden constraints.
+
+## Best Practices
+
+- Start with a pipeline; upgrade to an agent only when dynamic decision-making is genuinely needed.
+- Set explicit iteration limits (max retries, max tool calls) to prevent runaway loops.
+- Use LangSmith traces to inspect every Thought → Action → Observation cycle during development.
+- Design tools to be reliable and well-documented — agent quality depends directly on tool quality.
+- Implement graceful degradation: if the agent cannot solve the task, return a safe fallback response.
+- Log all tool calls, decisions, and state changes for debugging and audit trails.
+- Use agentic RAG when retrieval quality is uncertain and query refinement may be needed.
+- Test agents with diverse scenarios including edge cases, ambiguous inputs, and cases requiring no action.
 
 ## Related Concepts
 
