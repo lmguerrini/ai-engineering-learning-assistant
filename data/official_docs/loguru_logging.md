@@ -3,6 +3,7 @@
 - **Official source**: https://loguru.readthedocs.io/
 - **Last refreshed**: 2025-05-05
 - **source_type**: official_docs
+- **Versions**: `loguru>=0.7`
 
 ## When to Use
 
@@ -14,56 +15,114 @@
 
 ### Logger Interface
 
-- Single global `logger` object: `from loguru import logger`.
-- Methods: `logger.debug()`, `logger.info()`, `logger.warning()`, `logger.error()`, `logger.critical()`.
-- String formatting with `{}` placeholders: `logger.info("User {}", username)`.
-- Lazy evaluation — format arguments only if the level is active.
+Single global logger — no factory or configuration boilerplate:
+
+```python
+from loguru import logger
+
+logger.info("Processing topic: {}", topic)
+logger.debug("Retrieved {} documents", len(docs))
+logger.warning("No context found for topic: {}", topic)
+logger.error("LLM call failed: {}", error_msg)
+```
+
+- Methods: `debug()`, `info()`, `warning()`, `error()`, `critical()`.
+- Uses `{}` placeholders (not `%s`) — arguments are formatted lazily only if the level is active.
 
 ### Sinks (Output Destinations)
 
-- `logger.add(sys.stderr, level="INFO")` — console output.
-- `logger.add("file.log", rotation="10 MB")` — file with rotation.
-- `logger.add("file.log", retention="7 days")` — automatic cleanup.
-- `logger.add(custom_function)` — any callable as a log sink.
-- `logger.remove()` removes all previously added sinks.
+```python
+import sys
+
+# Remove default stderr sink
+logger.remove()
+
+# Console output
+logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level:<8} | {message}")
+
+# File with rotation and retention
+logger.add(
+    "logs/app.log",
+    rotation="10 MB",    # rotate when file reaches 10 MB
+    retention="7 days",  # delete logs older than 7 days
+    compression="zip",   # compress rotated files
+    level="DEBUG",
+)
+
+# Custom callable sink
+logger.add(my_monitoring_function, level="ERROR")
+```
+
+- `logger.remove()` with no arguments removes **all** previously added sinks.
+- `logger.remove(sink_id)` removes a specific sink by the ID returned from `add()`.
 
 ### Formatting
 
-- Default format includes timestamp, level, module, function, and message.
-- Custom format: `logger.add(sink, format="{time} {level} {message}")`.
-- Available fields: `{time}`, `{level}`, `{module}`, `{function}`, `{line}`, `{message}`.
-- Color markup: `<green>{time}</green>` for colored console output.
+Default format includes timestamp, level, module, function, line, and message.
+
+```python
+# Custom format string
+logger.add(sys.stderr, format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {module}:{function}:{line} | {message}")
+```
+
+Available fields: `{time}`, `{level}`, `{module}`, `{function}`, `{line}`, `{message}`, `{name}`, `{file}`.
+
+Color markup for console: `<green>{time}</green> <level>{message}</level>`.
 
 ### Exception Handling
 
-- `logger.exception("msg")` logs the current exception with full traceback.
-- `@logger.catch` decorator catches and logs exceptions from functions.
-- `logger.opt(exception=True)` includes exception info in any log call.
-- Stack traces are formatted with local variable values.
+```python
+# In except block — includes full traceback with local variables
+try:
+    result = process_query(topic)
+except Exception:
+    logger.exception("Failed to process query")
 
-### Filtering & Configuration
+# Decorator — catches and logs exceptions automatically
+@logger.catch
+def generate_study_guide(topic: str) -> dict:
+    ...
 
-- `logger.add(sink, filter=lambda record: "keyword" in record["message"])`.
-- `logger.bind(key=value)` adds context to subsequent log calls.
-- `logger.contextualize(key=value)` for context managers.
-- `logger.disable("module_name")` suppresses logs from specific modules.
-- `logger.enable("module_name")` re-enables suppressed logs.
+# Include exception info in any log call
+logger.opt(exception=True).error("Something failed")
+```
+
+Stack traces include local variable values for faster debugging.
+
+### Context & Filtering
+
+```python
+# Bind context to logger
+contextualized = logger.bind(user_id="user-123", session="abc")
+contextualized.info("Starting workflow")  # includes user_id and session in record
+
+# Context manager
+with logger.contextualize(request_id="req-456"):
+    logger.info("Processing request")  # includes request_id
+
+# Filter by module
+logger.disable("noisy_module")
+logger.enable("noisy_module")
+
+# Custom filter function
+logger.add(sink, filter=lambda record: "kb" in record["name"])
+```
 
 ## Practical Implementation Notes
 
-- Remove the default stderr sink before adding custom sinks: `logger.remove()`.
-- Use `rotation` and `retention` together for production log management.
-- Add structured context with `logger.bind()` for request tracing.
+- Call `logger.remove()` before adding custom sinks to avoid duplicate output.
+- Use `rotation` + `retention` together for production log management.
+- Add structured context with `logger.bind()` for request-level tracing.
 - Use `logger.opt(lazy=True)` with lambda for expensive log message construction.
 - Configure logging once at application startup, not per-module.
 
 ## Common Mistakes
 
-- Adding multiple sinks without removing the default, causing duplicate output.
-- Not using `logger.exception()` in except blocks, losing traceback info.
-- Using f-strings instead of `{}` placeholders, losing lazy evaluation benefit.
-- Forgetting that `logger.remove()` with no arguments removes all sinks.
-- Setting log level too low in production, causing performance issues.
+- Adding sinks without removing the default — causes duplicate console output.
+- Not using `logger.exception()` in except blocks — loses traceback information.
+- Using f-strings instead of `{}` placeholders — loses lazy evaluation benefit.
+- Calling `logger.remove()` with no arguments when intending to remove a specific sink.
+- Setting log level too low (`DEBUG`) in production — degrades performance.
 
 ## Related Project Usage
 

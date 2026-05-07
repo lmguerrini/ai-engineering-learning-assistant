@@ -3,6 +3,7 @@
 - **Official source**: https://docs.streamlit.io/
 - **Last refreshed**: 2025-05-05
 - **source_type**: official_docs
+- **Versions**: `streamlit>=1.30`
 
 ## When to Use
 
@@ -14,56 +15,143 @@
 
 ### App Execution Model
 
-- Streamlit reruns the entire script on each user interaction.
+Streamlit reruns the **entire script** on each user interaction (widget click, input change).
+
+```python
+import streamlit as st
+
+st.title("AI Learning Assistant")
+
+# This runs on EVERY interaction
+topic = st.text_input("Enter a topic:")
+
+if topic:
+    with st.spinner("Generating study guide..."):
+        result = generate_guide(topic)  # expensive — should be cached or in session_state
+    st.markdown(result)
+```
+
 - Top-to-bottom execution — every widget and display call runs every time.
-- Use `st.session_state` to persist data across reruns.
-- Avoid expensive computations at module level; use caching.
+- Avoid expensive computations at module level; use caching or session state.
 
 ### Layout & Navigation
 
-- `st.sidebar` for navigation menus and settings.
-- `st.columns(n)` for horizontal layouts.
-- `st.tabs(["Tab1", "Tab2"])` for tabbed content.
-- `st.expander("Title")` for collapsible sections.
-- `st.container()` for grouping related elements.
+```python
+# Sidebar navigation
+with st.sidebar:
+    page = st.radio("Navigation", ["Learn", "Quiz", "Progress"])
+
+# Columns
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("Score", "85%")
+with col2:
+    st.metric("Topics", 12)
+
+# Tabs
+tab1, tab2 = st.tabs(["Study Guide", "Sources"])
+with tab1:
+    st.markdown(guide_content)
+with tab2:
+    st.json(sources)
+
+# Collapsible sections
+with st.expander("Show trace details"):
+    st.code(trace_log)
+```
 
 ### Session State
 
-- `st.session_state["key"] = value` persists across reruns.
-- Check existence: `if "key" not in st.session_state:`.
-- Widgets with `key` parameter auto-sync with session state.
+Persist data across reruns using `st.session_state`:
+
+```python
+# Initialize state
+if "quiz_answers" not in st.session_state:
+    st.session_state.quiz_answers = []
+
+# Update state
+st.session_state.quiz_answers.append(user_answer)
+
+# Widgets auto-sync with session state via key parameter
+st.text_input("Topic", key="current_topic")
+# Access: st.session_state.current_topic
+```
+
 - Session state resets when the browser tab is closed.
+- Use for workflow state: quiz answers, graph results, conversation history.
 
 ### Caching
 
-- `@st.cache_data` caches function results based on input hash.
-- `@st.cache_resource` caches expensive objects (DB connections, models).
-- `ttl` parameter sets time-to-live for cache entries.
+```python
+@st.cache_data(ttl=3600)  # cache for 1 hour
+def load_knowledge_base(path: str) -> list[dict]:
+    """Cached — result stored based on input hash."""
+    return load_documents(path)
+
+@st.cache_resource
+def get_vector_store():
+    """Cached — singleton resource shared across reruns and sessions."""
+    return initialize_chroma_client()
+```
+
+| Decorator | Use Case | Scope |
+|-----------|----------|-------|
+| `@st.cache_data` | Data transforms, API calls, file reads | Per-input hash, serialized |
+| `@st.cache_resource` | DB connections, ML models, heavy objects | Global singleton |
+
+- `ttl` parameter sets time-to-live in seconds.
 - Cache clears on code change or manual `st.cache_data.clear()`.
 
 ### Input Widgets
 
-- `st.text_input`, `st.text_area` for text entry.
-- `st.selectbox`, `st.radio`, `st.multiselect` for selection.
-- `st.slider`, `st.number_input` for numeric input.
-- `st.button` returns `True` on click (one rerun only).
-- `st.form` with `st.form_submit_button` batches inputs before rerun.
+| Widget | Returns | Use Case |
+|--------|---------|----------|
+| `st.text_input(label)` | `str` | Short text entry |
+| `st.text_area(label)` | `str` | Multi-line text |
+| `st.selectbox(label, options)` | selected value | Single selection |
+| `st.multiselect(label, options)` | `list` | Multiple selection |
+| `st.slider(label, min, max)` | numeric | Range input |
+| `st.button(label)` | `bool` | Action trigger (True for one rerun only) |
+
+```python
+# Form batches inputs — single rerun on submit
+with st.form("quiz_form"):
+    answer = st.radio("Your answer:", options)
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        check_answer(answer)
+```
 
 ### Display Elements
 
-- `st.markdown`, `st.write` for rich text output.
-- `st.json` for formatted JSON display.
-- `st.dataframe`, `st.table` for tabular data.
-- `st.success`, `st.error`, `st.warning`, `st.info` for status messages.
-- `st.spinner("Loading...")` for progress indication.
+```python
+# Rich text
+st.markdown("## Study Guide")
+st.write(content)  # auto-detects type: str, dict, DataFrame, etc.
+
+# Status messages
+st.success("Guide generated successfully!")
+st.error("Failed to connect to OpenAI API.")
+st.warning("No documents found for this topic.")
+st.info("Tip: Try a more specific query.")
+
+# Structured data
+st.json({"topic": "RAG", "sections": [...]})
+st.dataframe(progress_df)
+
+# Progress indication
+with st.spinner("Searching knowledge base..."):
+    results = search_kb(query)
+```
 
 ## Practical Implementation Notes
 
 - Use `st.form` for multi-field submissions to reduce reruns.
 - Keep page functions modular — one function per page section.
 - Use `st.session_state` for workflow state (quiz answers, graph results).
-- Display errors with `st.error` — never raise uncaught exceptions in UI code.
+- Display errors with `st.error()` — never raise uncaught exceptions in UI code.
 - Use `st.spinner` around slow operations (LLM calls, retrieval).
+- Prefer `@st.cache_resource` for heavy objects (vector store, embedding model).
 
 ## Common Mistakes
 
@@ -71,7 +159,7 @@
 - Not using `st.session_state` — losing state on each rerun.
 - Nesting `st.button` checks — inner buttons never trigger due to rerun model.
 - Using `st.rerun()` excessively, causing infinite rerun loops.
-- Forgetting that `st.button` is `True` for only one script execution.
+- Forgetting that `st.button` returns `True` for only one script execution.
 
 ## Related Project Usage
 
