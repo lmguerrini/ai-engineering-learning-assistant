@@ -18,6 +18,11 @@ from src.ui.display_helpers import (
 # ---------------------------------------------------------------------------
 
 _LEARN_PATH_LABELS = ["Beginner", "Intermediate", "Advanced"]
+_LEARN_PATH_DISPLAY_NAMES = {
+    "Beginner": "Foundations of LLM Application Development",
+    "Intermediate": "Building Applications with LangChain, RAGs, and Streamlit",
+    "Advanced": "AI Agents and Orchestration",
+}
 _LEARN_PATH_TO_ENUM = {
     "Beginner": DifficultyLevel.BEGINNER,
     "Intermediate": DifficultyLevel.INTERMEDIATE,
@@ -30,19 +35,105 @@ _DEPTH_TO_STYLE = {
 }
 _LEARNING_MODE_LABELS = ["Learn Path", "Topic"]
 
+# Stable, professionally-capitalised topic lists per Learn Path level
+_LEARN_PATH_STABLE_TOPICS: dict[str, list[str]] = {
+    "Beginner": [
+        "LLM Basics",
+        "Prompt Engineering",
+        "Development Environment",
+        "API Usage",
+        "First Working Application",
+    ],
+    "Intermediate": [
+        "LangChain Chains",
+        "Retrieval-Augmented Generation",
+        "Function Calling",
+        "Tool Integration",
+        "Streamlit UI",
+        "Evaluation",
+    ],
+    "Advanced": [
+        "LangGraph State Management",
+        "Agentic RAG",
+        "Long-Term Memory",
+        "Human-in-the-Loop",
+        "Checkpointers",
+        "Observability",
+        "Production Deployment",
+    ],
+}
+
+# Concise descriptions for each stable topic (used in Deep Study Topics list)
+_LEARN_PATH_TOPIC_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    "Beginner": {
+        "LLM Basics": "Understand large language model fundamentals, tokenization, and inference.",
+        "Prompt Engineering": "Design effective prompts using techniques like few-shot, chain-of-thought, and role prompting.",
+        "Development Environment": "Set up Python tooling, virtual environments, and API keys for LLM development.",
+        "API Usage": "Interact with OpenAI and other LLM provider APIs programmatically.",
+        "First Working Application": "Build and deploy a simple end-to-end LLM-powered application.",
+    },
+    "Intermediate": {
+        "LangChain Chains": "Build reusable chains and workflows with language model components.",
+        "Retrieval-Augmented Generation": "Combine vector search with LLM generation for knowledge-grounded answers.",
+        "Function Calling": "Enable LLMs to invoke structured functions and return typed outputs.",
+        "Tool Integration": "Connect external tools, APIs, and databases to LLM workflows.",
+        "Streamlit UI": "Create interactive web interfaces for LLM applications with Streamlit.",
+        "Evaluation": "Measure and improve LLM output quality with automated and human evaluation.",
+    },
+    "Advanced": {
+        "LangGraph State Management": "Design stateful, multi-step agent workflows with LangGraph.",
+        "Agentic RAG": "Build autonomous retrieval agents that decide when and what to retrieve.",
+        "Long-Term Memory": "Persist conversation history and user context across sessions.",
+        "Human-in-the-Loop": "Add approval gates and human oversight to automated agent pipelines.",
+        "Checkpointers": "Save and restore agent state for resilience and debugging.",
+        "Observability": "Monitor, trace, and debug LLM applications in development and production.",
+        "Production Deployment": "Deploy, scale, and operate LLM applications in production environments.",
+    },
+}
+
+# Estimated effort per topic (varied, realistic)
+_LEARN_PATH_TOPIC_EFFORT: dict[str, dict[str, str]] = {
+    "Beginner": {
+        "LLM Basics": "~2–3 hours",
+        "Prompt Engineering": "~3–4 hours",
+        "Development Environment": "~1–2 hours",
+        "API Usage": "~2–3 hours",
+        "First Working Application": "~3–5 hours",
+    },
+    "Intermediate": {
+        "LangChain Chains": "~3–4 hours",
+        "Retrieval-Augmented Generation": "~4–5 hours",
+        "Function Calling": "~2–3 hours",
+        "Tool Integration": "~3–4 hours",
+        "Streamlit UI": "~3–4 hours",
+        "Evaluation": "~2–3 hours",
+    },
+    "Advanced": {
+        "LangGraph State Management": "~4–5 hours",
+        "Agentic RAG": "~4–6 hours",
+        "Long-Term Memory": "~3–4 hours",
+        "Human-in-the-Loop": "~3–4 hours",
+        "Checkpointers": "~2–3 hours",
+        "Observability": "~3–4 hours",
+        "Production Deployment": "~4–6 hours",
+    },
+}
+
 # Learn Path mode: maps path level to a guided topic string
 _LEARN_PATH_TOPIC_MAP = {
     "Beginner": (
-        "Foundations of AI Engineering: LLM basics, prompt engineering, "
-        "development environment, and API usage"
+        "Foundations of LLM Application Development: LLM basics, prompt engineering, "
+        "development environment, API usage, and first working application"
     ),
     "Intermediate": (
-        "Chains, RAG, and tools: LangChain chains, retrieval-augmented generation, "
-        "function calling, tool integration, and evaluation"
+        "Building Applications with LangChain, RAGs, and Streamlit: LangChain chains, "
+        "retrieval-augmented generation, function calling, tool integration, "
+        "Streamlit UI, and evaluation"
     ),
     "Advanced": (
-        "Agents and orchestration: LangGraph state management, agentic RAG, "
-        "long-term memory, human-in-the-loop, observability, and production deployment"
+        "AI Agents and Orchestration: LangGraph state management, agentic RAG, "
+        "long-term memory, human-in-the-loop, checkpointers, observability, "
+        "and production deployment"
     ),
 }
 
