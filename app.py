@@ -4,13 +4,8 @@ import streamlit as st
 
 from src.logging_config import setup_logging
 from src.services.observability import configure_langsmith_tracing
-from src.ui.pages import (
-    render_advanced,
-    render_intro,
-    render_learn,
-    render_progress,
-    render_quiz,
-)
+from src.ui.pages import render_intro, render_quiz, render_progress, render_advanced
+from src.ui.learn_page import render_learn
 
 setup_logging()
 configure_langsmith_tracing()

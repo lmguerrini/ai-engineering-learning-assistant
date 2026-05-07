@@ -398,13 +398,13 @@ class TestDynamicButton:
     """Generate button label should vary by learning mode."""
 
     def test_learn_page_source_has_dynamic_button(self):
-        with open("src/ui/pages.py") as f:
+        with open("src/ui/learn_page.py") as f:
             source = f.read()
         assert "Generate Learn Path" in source
         assert "Generate Topic" in source
 
     def test_no_demo_expander(self):
-        with open("src/ui/pages.py") as f:
+        with open("src/ui/learn_page.py") as f:
             source = f.read()
         assert "Load a recommended setup" not in source
 
@@ -441,7 +441,7 @@ class TestLearnSubtitle:
     """Learn subtitle should mention both Topic and Learn Path."""
 
     def test_subtitle_mentions_both_modes(self):
-        with open("src/ui/pages.py") as f:
+        with open("src/ui/learn_page.py") as f:
             source = f.read()
         assert "Topic" in source
         assert "Learn Path" in source
