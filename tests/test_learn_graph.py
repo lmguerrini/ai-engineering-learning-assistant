@@ -10,6 +10,9 @@ from src.graphs.learn_nodes import (
     _MIN_SOURCES,
     _build_fallback_guide,
     _build_memory_context,
+    _build_sources_list,
+    _extract_summary_from_markdown,
+    _generate_deep_study_learn_path,
     assess_source_quality,
     generate_study_guide,
     load_user_memory,
@@ -20,6 +23,7 @@ from src.graphs.learn_nodes import (
     return_output,
     validate_input,
 )
+from src.graphs.learn_prompts import is_deep_study_learn_path
 from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
 from src.schemas import DifficultyLevel, ResponseStyle, StudyGuide
@@ -103,10 +107,18 @@ class TestLoadUserMemory:
 
 class TestRetrieveSources:
     @patch("src.graphs.learn_nodes.retrieve_documents")
-    def test_retrieves_docs(self, mock_retrieve):
+    def test_retrieves_docs_deep_study(self, mock_retrieve):
         docs = _make_docs(3)
         mock_retrieve.return_value = docs
-        result = retrieve_sources(_base_state(query="AI Agents"))
+        result = retrieve_sources(_base_state(query="AI Agents", style=ResponseStyle.DETAILED))
+        assert result["retrieved_docs"] == docs
+        mock_retrieve.assert_called_once_with(query="AI Agents", top_k=10)
+
+    @patch("src.graphs.learn_nodes.retrieve_documents")
+    def test_retrieves_docs_summary(self, mock_retrieve):
+        docs = _make_docs(3)
+        mock_retrieve.return_value = docs
+        result = retrieve_sources(_base_state(query="AI Agents", style=ResponseStyle.CONCISE))
         assert result["retrieved_docs"] == docs
         mock_retrieve.assert_called_once_with(query="AI Agents", top_k=6)
 
@@ -157,7 +169,7 @@ class TestGenerateStudyGuide:
         result = generate_study_guide(state)
         guide = result["study_guide"]
         assert isinstance(guide, StudyGuide)
-        assert "without LLM" in guide.summary
+        assert "overview" in guide.summary.lower()
         assert any("no API key" in t for t in result["trace"])
 
     @patch("src.graphs.learn_nodes.get_settings")
@@ -347,10 +359,125 @@ class TestBuildFallbackGuide:
         guide = _build_fallback_guide(state)
         assert guide.topic == "AI Agents"
         assert len(guide.sources) == 3
-        assert "without LLM" in guide.summary
+        assert "overview" in guide.summary.lower()
 
     def test_builds_from_empty_docs(self):
-        state = _base_state(retrieved_docs=[])
+        state = _base_state(retrieved_docs=[])  
         guide = _build_fallback_guide(state)
         assert guide.topic == "AI Agents"
-        assert guide.detailed_notes == "No content available."
+        assert "could not be fully generated" in guide.detailed_notes
+
+
+# ---------------------------------------------------------------------------
+# Deep Study Learn Path tests
+# ---------------------------------------------------------------------------
+
+_LEARN_PATH_TOPIC = (
+    "Building Applications with LangChain, RAGs, and Streamlit: LangChain chains, "
+    "retrieval-augmented generation, function calling, tool integration, "
+    "Streamlit UI, and evaluation"
+)
+
+
+class TestIsDeepStudyLearnPath:
+    def test_detects_deep_learn_path(self):
+        state = _base_state(topic=_LEARN_PATH_TOPIC, style=ResponseStyle.DETAILED)
+        assert is_deep_study_learn_path(state) is True
+
+    def test_rejects_summary_learn_path(self):
+        state = _base_state(topic=_LEARN_PATH_TOPIC, style=ResponseStyle.CONCISE)
+        assert is_deep_study_learn_path(state) is False
+
+    def test_rejects_deep_single_topic(self):
+        state = _base_state(topic="AI Agents", style=ResponseStyle.DETAILED)
+        assert is_deep_study_learn_path(state) is False
+
+
+class TestExtractSummaryFromMarkdown:
+    def test_extracts_first_paragraph(self):
+        md = "# Handbook\n\nThis is the overview paragraph.\n\n## Section 1\nMore content."
+        result = _extract_summary_from_markdown(md)
+        assert "overview paragraph" in result
+
+    def test_fallback_on_empty(self):
+        result = _extract_summary_from_markdown("")
+        assert "handbook" in result.lower()
+
+
+class TestBuildSourcesList:
+    def test_builds_sources(self):
+        docs = _make_docs(3)
+        state = _base_state(retrieved_docs=docs)
+        sources = _build_sources_list(state)
+        assert len(sources) == 3
+        assert sources[0].title == "Topic 0"
+
+    def test_limits_to_five(self):
+        docs = _make_docs(8)
+        state = _base_state(retrieved_docs=docs)
+        sources = _build_sources_list(state)
+        assert len(sources) == 5
+
+
+@patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
+@patch("src.graphs.learn_nodes.set_cached_value")
+class TestDeepStudyLearnPathFlow:
+    @patch("src.graphs.learn_nodes.get_settings")
+    def test_returns_markdown_guide(self, mock_settings, _cache_set, _cache_get):
+        """Deep Study Learn Path returns a StudyGuide built from raw markdown."""
+        mock_settings.return_value = MagicMock(
+            openai_api_key="sk-test",
+            app_default_model="gpt-4o-mini",
+        )
+        handbook_md = (
+            "# Professional Curriculum Handbook\n\n"
+            "This handbook covers LangChain and RAG topics in depth.\n\n"
+            "## LangChain Chains\n\n### Theory\nLangChain provides...\n"
+        )
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content=handbook_md))]
+        mock_response.usage = MagicMock(prompt_tokens=500, completion_tokens=2000, total_tokens=2500)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        state = _base_state(
+            topic=_LEARN_PATH_TOPIC,
+            style=ResponseStyle.DETAILED,
+            retrieved_docs=_make_docs(3),
+        )
+
+        with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
+            result = generate_study_guide(state)
+
+        guide = result["study_guide"]
+        assert isinstance(guide, StudyGuide)
+        # Should contain raw markdown in detailed_notes, NOT parsed JSON
+        assert "LangChain" in guide.detailed_notes
+        assert "handbook" in guide.detailed_notes.lower() or "chains" in guide.detailed_notes.lower()
+        # key_concepts extracted from topic string
+        assert len(guide.key_concepts) > 0
+        # Sources built from retrieved docs
+        assert len(guide.sources) > 0
+        # Trace shows markdown flow
+        assert any("deep_study_learn_path" in t for t in result["trace"])
+        assert any("markdown" in t.lower() for t in result["trace"])
+
+    @patch("src.graphs.learn_nodes.get_settings")
+    def test_fallback_on_error(self, mock_settings, _cache_set, _cache_get):
+        """Deep Study Learn Path falls back gracefully on LLM error."""
+        mock_settings.return_value = MagicMock(
+            openai_api_key="sk-test",
+            app_default_model="gpt-4o-mini",
+        )
+        state = _base_state(
+            topic=_LEARN_PATH_TOPIC,
+            style=ResponseStyle.DETAILED,
+            retrieved_docs=_make_docs(2),
+        )
+        with patch("src.graphs.learn_nodes.OpenAI", side_effect=Exception("API down")):
+            result = generate_study_guide(state)
+
+        guide = result["study_guide"]
+        assert isinstance(guide, StudyGuide)
+        assert any("error" in t.lower() for t in result["trace"])

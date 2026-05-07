@@ -10,7 +10,12 @@ from loguru import logger
 from openai import OpenAI
 
 from src.config import get_settings
-from src.graphs.learn_prompts import _build_memory_context, _build_prompt
+from src.graphs.learn_prompts import (
+    _build_memory_context,
+    _build_prompt,
+    _build_deep_study_markdown_prompt,
+    is_deep_study_learn_path,
+)
 from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
 from src.kb.official_docs import retrieve_with_fallback
@@ -19,11 +24,14 @@ from src.schemas import DifficultyLevel, ResponseStyle, Source, StudyGuide
 from src.services.cache import build_cache_key, get_cached_value, set_cached_value
 from src.services.cost_tracker import build_usage_record
 from src.services.retry import with_retry
+from src.ui.shared import _LEARN_PATH_STABLE_TOPICS
 
 # Minimum number of retrieved chunks to consider sources sufficient
 _MIN_SOURCES = 2
 # Minimum total characters across chunks to consider sources sufficient
 _MIN_CONTENT_CHARS = 200
+# Prompt version — bump to invalidate stale cached outputs
+_PROMPT_VERSION = "v9"
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +121,15 @@ def retrieve_sources(state: LearningState) -> dict:
     is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
     trace.append(f"retrieve_sources: query='{query}' (attempt {attempts})")
 
-    curated_docs = retrieve_documents(query=query, top_k=6)
+    curated_top_k = 10 if is_deep else 6
+    curated_docs = retrieve_documents(query=query, top_k=curated_top_k)
     trace.append(f"retrieve_sources: got {len(curated_docs)} curated chunks")
 
     if is_deep:
         # Deep Study: always enrich with official docs regardless of sufficiency
         from src.kb.official_docs import retrieve_official_docs
 
-        official_docs = retrieve_official_docs(query=query, top_k=4)
+        official_docs = retrieve_official_docs(query=query, top_k=6)
         curated_count = len(curated_docs)
         # Merge curated (primary) + official (enrichment), dedup by content
         seen_content = {d.content[:100] for d in curated_docs}
@@ -208,12 +217,27 @@ def _parse_study_guide(raw: str, state: LearningState) -> StudyGuide:
 
     Always populates sources from retrieved_docs so the guide carries
     real provenance information regardless of what the LLM returned.
+    Attempts to recover from truncated JSON when the LLM output was
+    cut short by the max_tokens limit.
     """
     text = raw.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        # Attempt to recover truncated JSON — close any open string and braces
+        repaired = text.rstrip()
+        # If truncated inside a string value, close it
+        if repaired.count('"') % 2 == 1:
+            repaired += '"'
+        # Close any open arrays/objects
+        open_braces = repaired.count('{') - repaired.count('}')
+        open_brackets = repaired.count('[') - repaired.count(']')
+        repaired += ']' * max(0, open_brackets)
+        repaired += '}' * max(0, open_braces)
+        data = json.loads(repaired)  # raises if still invalid
 
     # Build sources from retrieved docs (authoritative) instead of relying
     # on whatever the LLM chose to include in its JSON output.
@@ -230,25 +254,43 @@ def _parse_study_guide(raw: str, state: LearningState) -> StudyGuide:
 
 
 def _build_fallback_guide(state: LearningState) -> StudyGuide:
-    """Build a minimal guide from retrieved sources when LLM fails."""
+    """Build a clean minimal guide when LLM generation fails.
+
+    Does NOT dump raw retrieved chunks into the body.  Instead,
+    produces a short synthesized placeholder with topic names so
+    the user sees a presentable result while sources remain in the
+    Sources section only.
+    """
     docs: list[Document] = state.get("retrieved_docs", [])
     topic = state.get("topic", "Unknown")
     difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
 
+    # Collect source metadata for the Sources section only
     sources = []
-    notes_parts = []
+    seen_titles: set[str] = set()
     for doc in docs[:5]:
         title = doc.metadata.get("topic", doc.metadata.get("filename", "source"))
         meta = {k: str(v) for k, v in doc.metadata.items() if k in ("filename", "source", "topic")}
         sources.append(Source(title=title, content_snippet=doc.content[:200], relevance_score=0.5, metadata=meta))
-        notes_parts.append(doc.content[:500])
+        seen_titles.add(title)
+
+    # Build a clean topic list from source titles
+    topic_list = ", ".join(sorted(seen_titles)) if seen_titles else topic
 
     return StudyGuide(
         topic=topic,
         difficulty=difficulty,
-        summary=f"Study guide for {topic} (generated from retrieved sources without LLM).",
-        key_concepts=[topic],
-        detailed_notes="\n\n".join(notes_parts) if notes_parts else "No content available.",
+        summary=(
+            f"An overview of {topic}. This guide covers the key concepts "
+            f"and provides a starting point for further study."
+        ),
+        key_concepts=[f"{t}: See the sources section for details." for t in sorted(seen_titles)[:8]] or [topic],
+        detailed_notes=(
+            f"This study guide could not be fully generated at this time. "
+            f"The following topics are covered by the available sources: "
+            f"{topic_list}.\n\n"
+            f"Please try again or select a different topic for a complete guide."
+        ),
         sources=sources,
     )
 
@@ -261,15 +303,60 @@ def _build_learn_cache_key(state: LearningState) -> str:
         "difficulty": str(state.get("difficulty", "")),
         "style": str(state.get("style", "")),
         "memory_hash": str(sorted(profile.items())) if profile else "",
+        "prompt_version": _PROMPT_VERSION,
     }
     return build_cache_key("learn_guide", payload)
 
 
-def generate_study_guide(state: LearningState) -> dict:
-    """Generate a structured study guide using the LLM."""
+def _build_sources_list(state: LearningState) -> list[Source]:
+    """Build a list of Source objects from retrieved documents."""
+    docs: list[Document] = state.get("retrieved_docs", [])
+    sources: list[Source] = []
+    for doc in docs[:5]:
+        title = doc.metadata.get("topic", doc.metadata.get("filename", "source"))
+        meta = {
+            k: str(v)
+            for k, v in doc.metadata.items()
+            if k in ("filename", "source", "topic", "source_type")
+        }
+        sources.append(
+            Source(
+                title=title,
+                content_snippet=doc.content[:200],
+                relevance_score=0.5,
+                metadata=meta,
+            )
+        )
+    return sources
+
+
+def _extract_summary_from_markdown(markdown: str) -> str:
+    """Extract the first meaningful paragraph as summary from handbook markdown."""
+    lines = markdown.strip().splitlines()
+    paragraph: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        # Skip headings and empty lines at the start
+        if not paragraph and (not stripped or stripped.startswith("#")):
+            continue
+        if stripped:
+            paragraph.append(stripped)
+        elif paragraph:
+            break  # end of first paragraph
+    return " ".join(paragraph[:4]) if paragraph else "Deep Study curriculum handbook."
+
+
+def _generate_deep_study_learn_path(state: LearningState) -> dict:
+    """Dedicated generation flow for Deep Study + Learn Path.
+
+    Generates the handbook as raw Markdown (no JSON) and constructs
+    the StudyGuide object manually.  This avoids the truncated-JSON
+    problem that occurs when a huge markdown handbook is wrapped in JSON.
+    """
     trace = list(state.get("trace", []))
-    trace.append("generate_study_guide: started")
+    trace.append("generate_study_guide: deep_study_learn_path flow")
     token_usage = dict(state.get("token_usage", {}))
+    usage_records = list(state.get("usage_records", []))
 
     # --- Check cache ---
     cache_key = _build_learn_cache_key(state)
@@ -278,20 +365,18 @@ def generate_study_guide(state: LearningState) -> dict:
         try:
             guide = StudyGuide(**cached)
             trace.append("generate_study_guide: cache hit")
-            return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+            return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
         except Exception:
-            pass  # invalid cache entry — continue to LLM
+            pass
 
     settings = get_settings()
     if not settings.openai_api_key:
         trace.append("generate_study_guide: no API key — using fallback guide")
         guide = _build_fallback_guide(state)
-        return {"study_guide": guide, "trace": trace, "token_usage": token_usage}
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
 
-    prompt = _build_prompt(state)
-
+    prompt = _build_deep_study_markdown_prompt(state)
     model = settings.app_default_model
-    usage_records = list(state.get("usage_records", []))
 
     try:
         client = OpenAI(api_key=settings.openai_api_key)
@@ -301,6 +386,129 @@ def generate_study_guide(state: LearningState) -> dict:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
+                max_tokens=16384,
+            )
+
+        response = with_retry(
+            callable=_llm_call,
+            max_attempts=2,
+            base_delay=1.0,
+            handled_exceptions=(Exception,),
+        )
+        raw = response.choices[0].message.content or ""
+        usage = response.usage
+        if usage:
+            token_usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0) + (usage.prompt_tokens or 0)
+            token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
+            token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
+
+        usage_dict = {
+            "prompt_tokens": usage.prompt_tokens if usage else 0,
+            "completion_tokens": usage.completion_tokens if usage else 0,
+            "total_tokens": usage.total_tokens if usage else 0,
+        }
+        usage_records.append(build_usage_record(model, "learn_guide_generation", usage_dict))
+
+        trace.append(f"generate_study_guide: LLM returned {len(raw)} chars (markdown)")
+
+        # --- Build StudyGuide manually from markdown ---
+        topic = state.get("topic", "Deep Study")
+        difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+
+        # Use stable, professionally-capitalised topic list
+        topic_parts = topic.split(":", 1)
+        curriculum_title = topic_parts[0].strip()
+        level_label = difficulty.value.capitalize()
+        key_concepts = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
+
+        summary = _extract_summary_from_markdown(raw)
+        sources = _build_sources_list(state)
+
+        guide = StudyGuide(
+            topic=curriculum_title,
+            difficulty=difficulty,
+            summary=summary,
+            key_concepts=key_concepts,
+            detailed_notes=raw.strip(),
+            sources=sources,
+        )
+        trace.append("generate_study_guide: StudyGuide built from markdown")
+
+        # Cache the result
+        try:
+            set_cached_value(cache_key, guide.model_dump(), ttl_seconds=3600)
+            trace.append("generate_study_guide: cached")
+        except Exception:
+            pass
+
+        return {
+            "study_guide": guide,
+            "trace": trace,
+            "token_usage": token_usage,
+            "usage_records": usage_records,
+        }
+
+    except Exception as e:
+        logger.error("Deep Study LLM call failed: {}", e)
+        trace.append(f"generate_study_guide: LLM error — {e}, using fallback")
+        guide = _build_fallback_guide(state)
+        return {
+            "study_guide": guide,
+            "trace": trace,
+            "token_usage": token_usage,
+            "usage_records": usage_records,
+        }
+
+
+def generate_study_guide(state: LearningState) -> dict:
+    """Generate a structured study guide using the LLM.
+
+    For Deep Study + Learn Path, delegates to a dedicated markdown-only
+    flow that avoids JSON parsing of huge content.
+    """
+    # --- Dedicated flow for Deep Study + Learn Path ---
+    if is_deep_study_learn_path(state):
+        return _generate_deep_study_learn_path(state)
+
+    trace = list(state.get("trace", []))
+    trace.append("generate_study_guide: started")
+    token_usage = dict(state.get("token_usage", {}))
+    usage_records = list(state.get("usage_records", []))
+
+    # --- Check cache ---
+    cache_key = _build_learn_cache_key(state)
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        try:
+            guide = StudyGuide(**cached)
+            trace.append("generate_study_guide: cache hit")
+            return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+        except Exception:
+            pass  # invalid cache entry — continue to LLM
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        trace.append("generate_study_guide: no API key — using fallback guide")
+        guide = _build_fallback_guide(state)
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+
+    prompt = _build_prompt(state)
+
+    model = settings.app_default_model
+
+    try:
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        style = state.get("style", ResponseStyle.CONCISE)
+        is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
+        max_tokens = 16384 if is_deep else 2048
+
+        def _llm_call() -> Any:
+            return client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=max_tokens,
             )
 
         response = with_retry(
