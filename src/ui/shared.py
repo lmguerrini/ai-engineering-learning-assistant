@@ -188,7 +188,12 @@ def _display_sources_section(guide: StudyGuide) -> None:
             label += f" ({meta_str})"
         with st.expander(label):
             st.caption(f"Relevance: {info['relevance_label']}")
-            st.text(info["snippet"][:300])
+            snippet = info["snippet"]
+            # Show a clean, word-boundary-aware preview
+            if len(snippet) > 500:
+                cut = snippet[:500].rsplit(" ", 1)[0]
+                snippet = cut + " …"
+            st.markdown(snippet)
 
 
 def _display_memory_section(result: dict) -> None:

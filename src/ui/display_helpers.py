@@ -36,13 +36,16 @@ def format_source_display(source: Any) -> dict:
 
 
 def _sanitize_snippet(text: str) -> str:
-    """Strip markdown headings, single-letter artifacts, and collapse whitespace."""
+    """Strip markdown headings, short broken fragments, and collapse whitespace."""
     # Remove markdown heading markers (# ## ### etc.)
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     # Remove stray single-letter lines (e.g. lone "O")
     text = re.sub(r"^[A-Z]\n", "", text, flags=re.MULTILINE)
     # Remove stray single letters surrounded by whitespace mid-text
     text = re.sub(r"(?<=\s)[A-Z](?=\s)", "", text)
+    # Strip leading broken fragment (line that doesn't start with a capital
+    # letter or bullet — likely a truncated tail from chunking)
+    text = re.sub(r"^[a-z][^\n]{0,40}\n", "", text, count=1)
     # Collapse multiple blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
     # Collapse multiple spaces
