@@ -4,6 +4,7 @@ import re
 
 import streamlit as st
 
+
 from src.schemas import DifficultyLevel, StudyGuide
 from src.ui.display_helpers import downgrade_headings
 from src.ui.shared import (
@@ -150,6 +151,7 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
         _has_html = '<a id="' in notes
         st.markdown(notes, unsafe_allow_html=_has_html)
 
+    st.markdown("---")
     _display_sources_section(guide)
 
 

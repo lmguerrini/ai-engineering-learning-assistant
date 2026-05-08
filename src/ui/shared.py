@@ -1,5 +1,7 @@
 """Shared UI helpers and constants used across page modules."""
 
+import re
+
 import streamlit as st
 
 from src.schemas import DifficultyLevel, ResponseStyle, StudyGuide
@@ -168,9 +170,16 @@ def _show_friendly_error(error_type: str) -> None:
 
 
 def _display_sources_section(guide: StudyGuide) -> None:
-    """Render source transparency for a study guide."""
-    sources = deduplicate_sources(guide.sources) if guide else []
-    st.markdown(f"#### Sources — {format_sources_summary(sources)}")
+    """Render source transparency for a study guide.
+
+    Shows deduplicated unique sources as primary cards, then lists
+    additional retrieved chunks in a collapsed section so reviewers
+    can see the full retrieval breadth.
+    """
+    all_sources = guide.sources if guide else []
+    sources = deduplicate_sources(all_sources) if all_sources else []
+    st.markdown("#### Sources")
+    st.caption("Sources used to ground this generated learning content.")
 
     if not sources:
         st.info(
@@ -179,51 +188,215 @@ def _display_sources_section(guide: StudyGuide) -> None:
         )
         return
 
+    total_retrieved = len(all_sources)
+    unique_count = len(sources)
+    if total_retrieved > unique_count:
+        passage_word = "passage" if total_retrieved == 1 else "passages"
+        file_word = "source" if unique_count == 1 else "sources"
+        st.markdown(
+            f"_{total_retrieved} context {passage_word} retrieved "
+            f"→ {unique_count} unique {file_word} displayed._"
+        )
+    else:
+        st.markdown(f"_{format_sources_summary(sources)}_")
+
     for src in sources:
         info = format_source_display(src)
-        meta_parts = [f"{k}: {v}" for k, v in info["metadata_items"]]
-        meta_str = " · ".join(meta_parts) if meta_parts else ""
         label = info["title"]
-        if meta_str:
-            label += f" ({meta_str})"
+        if info["relevance_label"]:
+            label += f"  ·  relevance {info['relevance_label']}"
+
         with st.expander(label):
-            st.caption(f"Relevance: {info['relevance_label']}")
+            # Metadata as separate readable lines
+            for key, value in info["metadata_items"]:
+                st.markdown(f"**{key}:** {value}")
+
+            # Snippet preview — always end at a sentence boundary
             snippet = info["snippet"]
-            # Show a clean, word-boundary-aware preview
-            if len(snippet) > 500:
-                cut = snippet[:500].rsplit(" ", 1)[0]
-                snippet = cut + " …"
+            snippet = _trim_snippet_to_sentence(snippet, max_len=600)
             st.markdown(snippet)
+
+    # Show additional passages that were deduplicated away
+    if total_retrieved > unique_count:
+        seen_titles = {getattr(s, "title", "") for s in sources}
+        extra_lines: list[str] = []
+        for src in all_sources:
+            t = getattr(src, "title", "") or "Untitled"
+            if t in seen_titles:
+                continue
+            seen_titles.add(t)
+            meta = getattr(src, "metadata", {}) or {}
+            file_info = meta.get("filename", "")
+            line = f"- **{t}**"
+            if file_info:
+                line += f" ({file_info})"
+            extra_lines.append(line)
+        if extra_lines:
+            n = len(extra_lines)
+            passage_word = "passage" if n == 1 else "passages"
+            with st.expander(
+                f"{n} additional retrieved {passage_word} (duplicates removed)"
+            ):
+                for line in extra_lines:
+                    st.markdown(line)
 
 
 def _display_memory_section(result: dict) -> None:
-    """Render memory transparency for a workflow result."""
+    """Render memory transparency for a workflow result.
+
+    Always renders the expander.  When no memory profile exists, a clear
+    info banner is shown *inside* the expander so the container is never
+    visually empty.
+    """
     profile = result.get("memory_profile")
     mem = format_memory_transparency(profile)
 
+    _EMPTY_MEMORY_MSG = (
+        "No learning memory available yet. "
+        "Complete quizzes and learning sessions "
+        "to build personalized learning memory."
+    )
+
     with st.expander("Memory Profile"):
         if not mem["loaded"]:
-            st.info(
-                "Memory profile will be built automatically as you study "
-                "and save quiz results."
-            )
+            st.info(_EMPTY_MEMORY_MSG)
             return
 
+        has_content = False
         if mem.get("recent_topics"):
             st.markdown("**Recent topics:** " + ", ".join(mem["recent_topics"]))
+            has_content = True
         if mem.get("weak_areas"):
             st.markdown("**Recurring weak areas:** " + ", ".join(mem["weak_areas"]))
+            has_content = True
         if mem.get("average_score") is not None:
             st.markdown(f"**Average score:** {mem['average_score']:.0f}%")
+            has_content = True
         if mem.get("suggested_focus"):
             st.markdown("**Suggested focus:** " + ", ".join(mem["suggested_focus"]))
+            has_content = True
         if mem.get("preferred_style"):
             st.markdown(f"**Preferred style:** {mem['preferred_style']}")
+            has_content = True
+
+        if not has_content:
+            st.info(_EMPTY_MEMORY_MSG)
 
 
-def _display_debug_trace(result: dict, label: str = "Workflow Trace") -> None:
-    """Render workflow trace grouped into logical sections."""
+def _trim_snippet_to_sentence(text: str, max_len: int = 600) -> str:
+    """Trim *text* to at most *max_len* chars, ending at a sentence boundary.
+
+    Tries to cut at the last sentence-ending punctuation (`. `, `? `, `! `,
+    or a final `.`).  Falls back to a word boundary with trailing ``...``.
+    """
+    if len(text) <= max_len:
+        # Even short text may end mid-sentence — ensure clean ending
+        stripped = text.rstrip()
+        if stripped and stripped[-1] not in '.!?:;\'")':
+            for sep in ['. ', '? ', '! ']:
+                pos = stripped.rfind(sep)
+                if pos > len(stripped) // 3:
+                    return stripped[: pos + 1]
+            last_dot = stripped.rfind('.')
+            if last_dot > len(stripped) // 3:
+                return stripped[: last_dot + 1]
+            # No sentence boundary found — add ellipsis to signal truncation
+            space = stripped.rfind(' ')
+            if space > len(stripped) // 3:
+                return stripped[:space] + " ..."
+            return stripped + " ..."
+        return text
+
+    cut = text[:max_len]
+    # Prefer sentence-ending punctuation
+    for sep in ['. ', '? ', '! ']:
+        pos = cut.rfind(sep)
+        if pos > max_len // 3:
+            return cut[: pos + 1]
+    # Try bare period at end of a word
+    last_dot = cut.rfind('.')
+    if last_dot > max_len // 3:
+        return cut[: last_dot + 1]
+    # Fall back to word boundary
+    space = cut.rfind(' ')
+    if space > max_len // 3:
+        return cut[:space] + " ..."
+    return cut + " ..."
+
+
+def _build_workflow_summary(result: dict) -> list[str]:
+    """Build a human-readable workflow summary from trace entries and state.
+
+    Returns a list of short, reviewer-friendly bullet strings with concise
+    metadata (chunk counts, source quality, cache status, token usage).
+    """
+    steps: list[str] = []
+    trace = result.get("trace", [])
+
+    # Derive high-level steps from trace entries
+    has_validate = any("validate_input" in e for e in trace)
+    has_retrieve = any("retrieve_sources" in e for e in trace)
+    has_topic_aware = any("topic-aware" in e for e in trace)
+    has_refine = any("refine_query" in e for e in trace)
+    has_generate = any("generate" in e.lower() for e in trace)
+    has_cache = any("cache" in e.lower() for e in trace)
+
+    if has_validate:
+        steps.append("Input validated")
+
+    if has_retrieve:
+        label = "Topic-aware retrieval completed" if has_topic_aware else "Retrieval completed"
+        # Append passage count when available
+        sources = result.get("sources") or []
+        if sources:
+            label += f": {len(sources)} passages"
+        steps.append(label)
+
+    # Source quality — use the authoritative state flag set by assess_source_quality
+    source_quality_ok = result.get("source_quality_ok")
+    if source_quality_ok is not None:
+        steps.append("Source quality: sufficient" if source_quality_ok else "Source quality: insufficient")
+    elif has_retrieve:
+        # Fallback: infer from trace text
+        trace_text = " ".join(trace).lower()
+        if "insufficient" in trace_text:
+            steps.append("Source quality: insufficient")
+        elif "sufficient" in trace_text or sources:
+            steps.append("Source quality: sufficient")
+
+    if has_refine:
+        steps.append("Query refined for better results")
+    if has_generate:
+        steps.append("Content generated")
+
+    if has_cache:
+        cache_hit = any("cache_hit" in e.lower() or "cached result" in e.lower() for e in trace)
+        if cache_hit:
+            steps.append("Result cached (cache hit)")
+        else:
+            steps.append("Result cached")
+
+    # Token usage
+    tokens = result.get("token_usage", {}) or {}
+    total = tokens.get("total_tokens")
+    if total:
+        steps.append(f"Tokens used: {total}")
+
+    return steps
+
+
+def _display_debug_trace(result: dict, label: str = "Learn Workflow Trace") -> None:
+    """Render workflow trace with summary and raw details inside one expander."""
     with st.expander(label):
+        # --- Human-readable summary ---
+        summary_steps = _build_workflow_summary(result)
+        if summary_steps:
+            st.markdown("**Workflow Summary**")
+            for step in summary_steps:
+                st.markdown(f"- {step}")
+            st.markdown("---")
+
+        # --- Structured state fields ---
         fields = format_graph_state_summary(result)
         if fields:
             request_fields = []
@@ -234,7 +407,7 @@ def _display_debug_trace(result: dict, label: str = "Workflow Trace") -> None:
                 lbl = f["label"]
                 if lbl in ("Topic", "Learn Path", "Learning Depth", "Learning Mode"):
                     request_fields.append(f)
-                elif lbl in ("Sources Retrieved", "Retrieval Attempts", "Query Refined"):
+                elif lbl in ("Passages Retrieved", "Retrieval Attempts", "Query Refined"):
                     retrieval_fields.append(f)
                 elif lbl in ("Memory Profile",):
                     memory_fields.append(f)
@@ -259,6 +432,7 @@ def _display_debug_trace(result: dict, label: str = "Workflow Trace") -> None:
                     st.markdown(f"- {f['label']}: {f['value']}")
             st.markdown("---")
 
+        # --- Raw trace (nested expander) ---
         trace = result.get("trace", [])
         with st.expander("Raw trace"):
             if trace:

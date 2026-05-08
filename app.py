@@ -34,12 +34,32 @@ st.markdown(
     section[data-testid="stSidebar"] button {
         text-align: left;
     }
-    /* Global width polish: constrain notifications, expanders, dashboard cards */
-    .stAlert,
-    .streamlit-expanderHeader,
-    .streamlit-expanderContent,
-    [data-testid="stExpander"] {
+    /* Global readable max-width for all page content */
+    .block-container {
         max-width: 52rem;
+    }
+    /* Constrain code blocks and markdown content within readable width */
+    .stMarkdown {
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+    .stMarkdown pre {
+        max-width: 100%;
+        overflow-x: auto;
+        white-space: pre;
+    }
+    .stMarkdown code {
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+    .stMarkdown li pre,
+    .stMarkdown li code {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .stMarkdown ul, .stMarkdown ol {
+        max-width: 100%;
+        overflow: visible;
     }
     </style>
     """,

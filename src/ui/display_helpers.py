@@ -17,40 +17,102 @@ def format_source_display(source: Any) -> dict:
     metadata = getattr(source, "metadata", {}) or {}
 
     meta_items = []
-    if metadata.get("topic"):
-        meta_items.append(("Topic", metadata["topic"]))
-    if metadata.get("filename"):
-        meta_items.append(("File", metadata["filename"]))
-    if metadata.get("source_type"):
-        meta_items.append(("Type", metadata["source_type"]))
-    if metadata.get("source"):
-        meta_items.append(("Source", metadata["source"]))
+    for key, label in [
+        ("topic", "Topic"),
+        ("sprint", "Sprint"),
+        ("part", "Part"),
+        ("tags", "Tags"),
+        ("filename", "File"),
+        ("source_type", "Type"),
+        ("source", "Source"),
+    ]:
+        val = metadata.get(key)
+        if val:
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            meta_items.append((label, str(val)))
+
+    clean = _sanitize_snippet(snippet) if snippet else ""
+
+    # Detect placeholder/static relevance (hardcoded 0.5 everywhere)
+    is_real_relevance = relevance > 0 and relevance != 0.5
 
     return {
         "title": title,
-        "snippet": _sanitize_snippet(snippet) if snippet else "_No preview available._",
-        "relevance": relevance,
-        "relevance_label": f"{relevance:.1f}" if relevance > 0 else "N/A",
+        "snippet": clean if clean else "_No clean preview available._",
+        "relevance": relevance if is_real_relevance else 0.0,
+        "relevance_label": f"{relevance:.1f}" if is_real_relevance else "",
         "metadata_items": meta_items,
     }
 
 
 def _sanitize_snippet(text: str) -> str:
-    """Strip markdown headings, short broken fragments, and collapse whitespace."""
+    """Strip markdown headings, short broken fragments, and collapse whitespace.
+
+    Aggressively removes chunk artifacts (lone letters, partial words,
+    markdown noise) so that only readable, professional text remains.
+    Returns an empty string when nothing useful survives cleanup.
+    """
     # Remove markdown heading markers (# ## ### etc.)
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
-    # Remove stray single-letter lines (e.g. lone "O")
+    # Remove markdown link/image reference artifacts like [](url) or ![]()
+    text = re.sub(r"!?\[\]\([^)]*\)", "", text)
+    # Remove stray single-letter lines (e.g. lone "O", "N")
     text = re.sub(r"^[A-Z]\n", "", text, flags=re.MULTILINE)
+    # Remove short (1-3 char) uppercase-only lines — chunk artifacts like "ND", "IO"
+    text = re.sub(r"^[A-Z]{1,3}\s*$", "", text, flags=re.MULTILINE)
     # Remove stray single letters surrounded by whitespace mid-text
     text = re.sub(r"(?<=\s)[A-Z](?=\s)", "", text)
     # Strip leading broken fragment (line that doesn't start with a capital
     # letter or bullet — likely a truncated tail from chunking)
     text = re.sub(r"^[a-z][^\n]{0,40}\n", "", text, count=1)
+    # --- Fix mid-sentence starts ---
+    # If text starts with a lowercase word or partial sentence, skip to the
+    # first sentence boundary (period/exclamation/question followed by space
+    # and an uppercase letter) to avoid truncated-looking previews.
+    text = _skip_to_sentence_start(text)
+    # Strip trailing broken fragment (incomplete sentence not ending in punctuation)
+    stripped = text.rstrip()
+    if stripped and stripped[-1] not in '.!?:;)"\'' and len(stripped) > 20:
+        # Cut back to the last sentence-ending punctuation
+        last_stop = max(stripped.rfind('. '), stripped.rfind('? '),
+                        stripped.rfind('! '), stripped.rfind('.\n'),
+                        stripped.rfind('.'))
+        if last_stop > len(stripped) // 4:
+            text = stripped[: last_stop + 1]
+    # Remove lines that are only punctuation / special chars
+    text = re.sub(r"^[^\w\s]{1,5}\s*$", "", text, flags=re.MULTILINE)
+    # Remove bare URLs on their own line
+    text = re.sub(r"^https?://\S+\s*$", "", text, flags=re.MULTILINE)
     # Collapse multiple blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
     # Collapse multiple spaces
     text = re.sub(r"  +", " ", text)
-    return text.strip()
+    text = text.strip()
+    # If only very short junk remains, treat as empty
+    if len(text) < 8 or not re.search(r"[a-zA-Z]{2,}", text):
+        return ""
+    return text
+
+
+def _skip_to_sentence_start(text: str) -> str:
+    """If *text* begins mid-sentence, advance to the next clean sentence start.
+
+    A mid-sentence start is detected when the first non-whitespace character
+    is lowercase.  We then look for the first sentence boundary (`.` / `!` / `?`
+    followed by whitespace and an uppercase letter) and return from there.
+    If no boundary is found within the first 200 chars we return the original
+    text unchanged — it may still be usable.
+    """
+    stripped = text.lstrip()
+    if not stripped or stripped[0].isupper() or stripped[0] in '-•*–—0123456789':
+        return text  # already starts cleanly
+    # Look for sentence boundary in the first 200 chars
+    m = re.search(r'[.!?]\s+([A-Z])', stripped[:200])
+    if m:
+        return stripped[m.start(1):]
+    # No boundary found — return original
+    return text
 
 
 def deduplicate_sources(sources: list) -> list:
@@ -71,10 +133,10 @@ def format_sources_summary(sources: list) -> str:
     """Return a short summary string for a list of sources."""
     count = len(sources) if sources else 0
     if count == 0:
-        return "No sources used."
+        return "No source files used."
     if count == 1:
-        return "1 source used."
-    return f"{count} sources used."
+        return "1 unique source file displayed."
+    return f"{count} unique source files displayed."
 
 
 def downgrade_headings(text: str) -> str:
@@ -116,7 +178,7 @@ def format_graph_state_summary(result: dict) -> list[dict]:
         fields.append({"label": "Learning Depth", "value": val})
 
     docs = result.get("retrieved_docs", [])
-    fields.append({"label": "Sources Retrieved", "value": str(len(docs))})
+    fields.append({"label": "Passages Retrieved", "value": str(len(docs))})
 
     attempts = result.get("attempts")
     if attempts is not None:
@@ -145,10 +207,10 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
     if not memory_profile:
         return {
             "loaded": False,
-            "message": "Memory profile will be built automatically as you study and save quiz results.",
+            "message": "No learning memory available yet. Complete quizzes and learning sessions to build personalized learning memory.",
         }
 
-    return {
+    result = {
         "loaded": True,
         "recent_topics": memory_profile.get("recent_topics", []),
         "weak_areas": memory_profile.get("recurring_weak_areas", []),
@@ -156,6 +218,19 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
         "suggested_focus": memory_profile.get("suggested_focus_topics", []),
         "preferred_style": memory_profile.get("preferred_style"),
     }
+
+    # If profile dict exists but contains no meaningful data, mark as not loaded
+    has_data = (
+        bool(result["recent_topics"])
+        or bool(result["weak_areas"])
+        or result["average_score"] is not None
+        or bool(result["suggested_focus"])
+        or bool(result["preferred_style"])
+    )
+    if not has_data:
+        result["loaded"] = False
+
+    return result
 
 
 def format_error_message(error_type: str) -> dict:

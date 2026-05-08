@@ -109,12 +109,28 @@ def load_user_memory(state: LearningState) -> dict:
 # Node: retrieve_sources
 # ---------------------------------------------------------------------------
 
+def _get_learn_path_topics(state: LearningState) -> list[str] | None:
+    """Return per-topic query list if state represents a Learn Path, else None."""
+    topic = state.get("topic", "")
+    difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+    level_label = difficulty.value.capitalize()
+    topics = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
+    # Learn Path topics contain ":" in the topic string (e.g. "Foundations of …: LLM basics, …")
+    if ":" in topic and topics:
+        return topics
+    return None
+
+
 def retrieve_sources(state: LearningState) -> dict:
     """Retrieve relevant documents from the knowledge base.
 
     First retrieves from the curated KB, then uses official docs
     as fallback/enrichment.  For Deep Study (DETAILED style), official
     docs are always merged to enrich technical precision.
+
+    For Learn Path Deep Study, retrieval is topic-aware: chunks are
+    retrieved per individual Learn Path topic, then merged and
+    deduplicated to ensure source diversity across all topics.
     """
     trace = list(state.get("trace", []))
     attempts = state.get("attempts", 0) + 1
@@ -123,15 +139,45 @@ def retrieve_sources(state: LearningState) -> dict:
     is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
     trace.append(f"retrieve_sources: query='{query}' (attempt {attempts})")
 
-    curated_top_k = 10 if is_deep else 6
-    curated_docs = retrieve_documents(query=query, top_k=curated_top_k)
-    trace.append(f"retrieve_sources: got {len(curated_docs)} curated chunks")
+    # --- Topic-aware retrieval for Learn Path Deep Study ---
+    path_topics = _get_learn_path_topics(state) if is_deep else None
+
+    if path_topics:
+        # Per-topic retrieval: retrieve a few chunks per topic, merge, dedup
+        per_topic_k = max(4, 10 // len(path_topics) + 1)
+        all_curated: list[Document] = []
+        seen_content: set[str] = set()
+        for sub_topic in path_topics:
+            topic_docs = retrieve_documents(query=sub_topic, top_k=per_topic_k)
+            for d in topic_docs:
+                key = d.content[:100]
+                if key not in seen_content:
+                    all_curated.append(d)
+                    seen_content.add(key)
+        # Also retrieve with the full query to catch cross-topic chunks
+        full_docs = retrieve_documents(query=query, top_k=6)
+        for d in full_docs:
+            key = d.content[:100]
+            if key not in seen_content:
+                all_curated.append(d)
+                seen_content.add(key)
+        trace.append(
+            f"retrieve_sources: topic-aware retrieval — "
+            f"{len(path_topics)} topics, {per_topic_k} chunks/topic, "
+            f"{len(all_curated)} unique curated chunks"
+        )
+        curated_docs = all_curated
+    else:
+        curated_top_k = 10 if is_deep else 6
+        curated_docs = retrieve_documents(query=query, top_k=curated_top_k)
+        trace.append(f"retrieve_sources: got {len(curated_docs)} curated chunks")
 
     if is_deep:
         # Deep Study: always enrich with official docs regardless of sufficiency
         from src.kb.official_docs import retrieve_official_docs
 
-        official_docs = retrieve_official_docs(query=query, top_k=6)
+        official_query = query
+        official_docs = retrieve_official_docs(query=official_query, top_k=6)
         curated_count = len(curated_docs)
         # Merge curated (primary) + official (enrichment), dedup by content
         seen_content = {d.content[:100] for d in curated_docs}
