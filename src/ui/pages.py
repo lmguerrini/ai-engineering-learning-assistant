@@ -41,26 +41,34 @@ def render_intro() -> None:
     """Render the Home section."""
     st.header("Welcome to the AI Engineering Learning App")
     st.markdown(
-        """
-        This app helps you study AI Engineering concepts through guided workflows:
-
-        1. **Learn** — Generate a structured Learn Path on a chosen topic.
-        2. **Quiz** — Test your understanding with generated questions.
-        3. **Progress** — Review your scores, weak areas, and preferences.
-        4. **Dashboard** — Inspect retrieval data, graph traces, and settings.
-
-        Select a section from the sidebar to get started.
-        """
+        "This app helps you study AI Engineering concepts through "
+        "guided, RAG-powered workflows."
     )
+
+    st.markdown(
+        "- **Learn** — Explore single-topic or guided multi-topic Learning Paths.\n"
+        "- **Quiz** — Test your understanding with generated questions "
+        "based on your topics and Learn Paths.\n"
+        "- **Progress** — Review your scores, weak areas, and "
+        "learning preferences.\n"
+        "- **Dashboard** — Inspect retrieval data, graph traces, "
+        "and settings."
+    )
+
+    st.markdown("Select a section from the sidebar to get started.")
 
     try:
         from src.config import get_settings
 
         settings = get_settings()
-        if not settings.openai_api_key:
-            _show_friendly_error("no_api_key")
-        else:
-            st.success("OpenAI API key configured. You're ready to learn.")
+        _col, _ = st.columns([2, 1])
+        with _col:
+            if not settings.openai_api_key:
+                _show_friendly_error("no_api_key")
+            else:
+                st.success("✅ OpenAI API key configured. You're ready to learn!")
     except Exception:
-        st.info("This is an early version. Configure your .env file to get started.")
+        _col, _ = st.columns([2, 1])
+        with _col:
+            st.info("This is an early version. Configure your .env file to get started.")
 
