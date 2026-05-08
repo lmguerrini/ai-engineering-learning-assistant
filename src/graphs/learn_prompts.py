@@ -21,6 +21,19 @@ def is_deep_study_learn_path(state: LearningState) -> bool:
     return is_deep and is_learn_path
 
 
+def is_deep_study_topic(state: LearningState) -> bool:
+    """Return True when the request is Deep Study + single Topic.
+
+    Uses a dedicated markdown-only generation flow (no JSON) to avoid
+    the truncated-JSON / malformed-JSON problem on long outputs.
+    """
+    style = state.get("style", ResponseStyle.CONCISE)
+    topic = state.get("topic", "")
+    is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
+    is_learn_path = ":" in topic and len(topic) > 60
+    return is_deep and not is_learn_path
+
+
 def _build_memory_context(state: LearningState) -> str:
     """Build personalization context from memory profile if available."""
     profile = state.get("memory_profile", {})
@@ -96,18 +109,42 @@ def _build_prompt(state: LearningState) -> str:
     # --- Deep Study + single Topic ---
     elif is_deep:
         style_instruction = (
-            "Produce a comprehensive, academic-quality Learn Path.\n"
-            "Structure the output with clearly separated Markdown sections:\n"
-            "1. Overview\n"
-            "2. Conceptual Explanation\n"
-            "3. Architecture / Implementation Details\n"
-            "4. Practical Examples (include code in ```python blocks when relevant)\n"
-            "5. Common Mistakes\n"
-            "6. When to Use / When Not to Use\n"
-            "7. Review Checklist (5-8 verification items)\n"
-            "8. Summary Table (Markdown table comparing key aspects)\n\n"
-            "Each section must be substantial. Do not write shallow one-liners.\n"
-            "Include concrete code examples where the topic involves implementation.\n"
+            "You are writing an EXHAUSTIVE, production-grade engineering reference "
+            "on a single topic.\n"
+            "Use ALL retrieved context fully — extract every useful detail, do not "
+            "summarise sources superficially.\n"
+            "The output must be long, deeply technical, and self-contained.\n\n"
+            "REQUIRED SECTIONS (use ## headings, in this exact order):\n"
+            "1. **Overview** — scope, purpose, relevance, and where this topic fits "
+            "in the broader AI/ML engineering stack (3-5 paragraphs).\n"
+            "2. **Conceptual Foundations** — core theory, formal definitions, mental "
+            "models, and underlying principles explained with precision. Include "
+            "mathematical intuition or pseudocode where it aids understanding.\n"
+            "3. **Architecture / Internal Design** — how the component is structured "
+            "internally; data flow, key abstractions, extension points. Use ASCII "
+            "diagrams or structured lists to illustrate architecture.\n"
+            "4. **Implementation Details** — step-by-step approach with code in "
+            "```python blocks; cover configuration, parameters, integration points, "
+            "and environment setup. Show how pieces connect in a real codebase.\n"
+            "5. **Practical Examples** — at least two realistic, runnable code examples "
+            "with line-by-line commentary. One should demonstrate basic usage, the "
+            "other an advanced or production scenario.\n"
+            "6. **Production Considerations** — scaling, performance tuning, error "
+            "handling, monitoring, observability hooks, and deployment patterns.\n"
+            "7. **Common Mistakes & Anti-Patterns** — concrete pitfalls with root-cause "
+            "explanations and corrective patterns. Include before/after code where useful.\n"
+            "8. **When to Use / When Not to Use** — decision matrix, alternatives, "
+            "trade-offs, and migration paths from/to competing approaches.\n"
+            "9. **Comparison Table** — a Markdown table comparing this approach with "
+            "2-3 alternatives across dimensions like complexity, performance, "
+            "ecosystem support, and learning curve.\n"
+            "10. **Review Checklist** — 8-10 verification items an engineer should "
+            "confirm before shipping code that uses this topic.\n\n"
+            "Each section must be substantial (multiple paragraphs, not one-liners).\n"
+            "Prioritize concrete, actionable engineering content over abstract prose.\n"
+            "Do NOT merge sections or skip any.\n"
+            "Do NOT include a 'Topics' list — this is a single-topic deep study.\n"
+            "Do NOT pad with filler — every sentence must add information.\n"
             "Use proper Markdown formatting throughout."
         )
     # --- Summary + Learn Path: compact curriculum overview ---
@@ -260,35 +297,165 @@ def _build_deep_study_markdown_prompt(state: LearningState) -> str:
     )
 
     return (
-        f"You are an AI Engineering tutor writing a PROFESSIONAL CURRICULUM HANDBOOK.\n"
+        f"You are a senior AI/ML engineer writing an EXHAUSTIVE, production-grade "
+        f"engineering curriculum.\n"
         f"Topic: '{topic}'\n"
         f"Level: {difficulty.value}\n\n"
-        f"This is an intensive Deep Study mode.\n"
-        f"The output must be very long, thorough, and synthesized in your own words.\n\n"
+        f"This is an intensive Deep Study mode — the DEEPEST content tier.\n"
+        f"Each topic section must read like a standalone technical reference, "
+        f"NOT a brief overview. Shallow sections with many headings and little "
+        f"explanation are unacceptable.\n\n"
         f"STRUCTURE REQUIREMENTS:\n"
-        f"Use EXACTLY these major sections, in this order:\n"
+        f"Use EXACTLY these major sections as ## headings, in this order:\n"
         f"{numbered_topics}\n\n"
-        f"Do NOT rename, reorder, merge, or skip any section.\n"
-        f"For EACH section above, produce a MAJOR section (## heading) containing ALL of:\n"
-        f"  1. **Theory** — core concepts, definitions, and mental models\n"
-        f"  2. **Architecture / Mental Model** — how the component is structured internally\n"
-        f"  3. **When to Use** — concrete scenarios and decision criteria\n"
-        f"  4. **Implementation Details** — step-by-step approach with code in ```python blocks\n"
-        f"  5. **Practical Example** — a realistic, runnable code example\n"
-        f"  6. **Common Mistakes** — pitfalls and how to avoid them\n"
-        f"  7. **Review Checklist** — 5-8 verification items for self-assessment\n\n"
-        f"Each major section must be substantial (multiple paragraphs, not one-liners).\n"
-        f"Use ## for each major topic heading, ### for sub-sections within.\n"
-        f"Include concrete code examples wherever implementation is relevant.\n"
-        f"Use proper Markdown formatting throughout.\n"
-        f"The total output should read like a chapter from a technical handbook.\n"
-        f"Do NOT compress multiple topics into a single shallow overview.\n"
-        f"Do NOT skip any sub-topic.\n"
+        f"Do NOT rename, reorder, merge, or skip any section.\n\n"
+        f"DEPTH REQUIREMENTS — for EACH section above, include ALL of these "
+        f"subsections (### headings):\n"
+        f"  1. **Theory & Context** — core concepts, formal definitions, mental "
+        f"models, and where this fits in the broader AI/ML stack. Explain the "
+        f"WHY, not just the WHAT. (3+ paragraphs minimum)\n"
+        f"  2. **Architecture / Internal Design** — how the component is "
+        f"structured internally; data flow, key abstractions, extension points. "
+        f"Use ASCII diagrams or structured lists to illustrate.\n"
+        f"  3. **Implementation Details** — step-by-step approach with code in "
+        f"```python blocks; cover configuration, parameters, integration points, "
+        f"and environment setup. Show how pieces connect in a real codebase.\n"
+        f"  4. **Practical Examples** — at least TWO realistic code examples: "
+        f"one basic usage, one advanced/production scenario. Include line-by-line "
+        f"commentary explaining key decisions.\n"
+        f"  5. **Common Mistakes & Anti-Patterns** — concrete pitfalls with "
+        f"root-cause explanations and corrective patterns. Include before/after "
+        f"code pairs that contain ACTUAL runnable function/class structures, not "
+        f"placeholder-only comments like '# bad approach'. Even illustrative code "
+        f"must show meaningful logic.\n"
+        f"  6. **Review Checklist** — 5-8 verification items for self-assessment "
+        f"before shipping code that uses this topic.\n\n"
+        f"QUALITY RULES:\n"
+        f"- Each subsection must be substantial (multiple paragraphs, not one-liners).\n"
+        f"- Prefer fewer but RICHER subsections over many shallow ones.\n"
+        f"- Every sentence must add information — do NOT pad with filler.\n"
+        f"- Include concrete code examples wherever implementation is relevant.\n"
+        f"- STRICT CODE BLOCK RULE: Every ```python or ``` code block MUST contain "
+        f"executable or structurally meaningful code — functions, classes, conditionals, "
+        f"loops, configuration dicts, test skeletons, or concrete CLI commands. "
+        f"NEVER produce a code block whose only content is comments like "
+        f"'# Set up a schedule for regular evaluations' or '# Complex chain with "
+        f"multiple responsibilities'. If the idea is conceptual, express it as "
+        f"prose or bullet text OUTSIDE a code block instead.\n"
+        f"- Before/after code pairs must show real function/class bodies with logic, "
+        f"not comment-only placeholders.\n"
+        f"- Use ## for each major topic heading, ### for sub-sections within.\n"
+        f"- Use proper Markdown formatting throughout.\n"
+        f"- The total output should be VERY LONG — comparable to a chapter from "
+        f"a professional technical book.\n"
+        f"- Do NOT compress multiple topics into a single shallow overview.\n"
+        f"- Do NOT skip any sub-topic or subsection.\n"
+        f"{difficulty_instruction}\n"
+        f"{personalization}\n"
+        f"Use the following sources as reference material.\n"
+        f"Synthesize IN YOUR OWN WORDS — do NOT copy source text verbatim.\n"
+        f"Use ALL retrieved context fully — extract every useful detail.\n"
+        f"{sources_text}\n\n"
+        f"OUTPUT FORMAT: Return ONLY Markdown text. Do NOT wrap in JSON.\n"
+        f"Do NOT include any JSON structure. Just write the curriculum in Markdown."
+    )
+
+
+def _build_deep_study_topic_markdown_prompt(state: LearningState) -> str:
+    """Build a prompt for Deep Study + single Topic that requests raw Markdown.
+
+    Mirrors ``_build_deep_study_markdown_prompt`` but tailored for a single
+    topic deep-dive.  Returns Markdown directly — no JSON wrapper.
+    """
+    topic = state.get("topic", "")
+    difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+    docs: list[Document] = state.get("retrieved_docs", [])
+
+    sources_text = ""
+    for i, doc in enumerate(docs, 1):
+        title = doc.metadata.get("topic", doc.metadata.get("filename", f"source_{i}"))
+        sources_text += f"\n--- Source {i}: {title} ---\n{doc.content}\n"
+
+    difficulty_instruction = ""
+    if difficulty == DifficultyLevel.ADVANCED:
+        difficulty_instruction = (
+            "\nAdvanced-level requirements:\n"
+            "- Discuss architecture tradeoffs and design decisions.\n"
+            "- Cover implementation concerns and edge cases.\n"
+            "- Include production considerations (scaling, error handling, monitoring).\n"
+            "- Address observability and testing where relevant.\n"
+            "- Mention security or reliability notes when applicable.\n"
+            "- Assume the reader already knows the basics.\n"
+        )
+    elif difficulty == DifficultyLevel.BEGINNER:
+        difficulty_instruction = (
+            "\nBeginner-level requirements:\n"
+            "- Explain every concept from first principles.\n"
+            "- Avoid jargon without defining it first.\n"
+            "- Use simple analogies where helpful.\n"
+        )
+
+    memory_context = _build_memory_context(state)
+    personalization = ""
+    if memory_context:
+        personalization = f"\nPersonalization context:\n{memory_context}\n"
+
+    return (
+        f"You are a senior AI/ML engineer writing an EXHAUSTIVE, production-grade "
+        f"engineering reference on a single topic.\n"
+        f"Topic: '{topic}'\n"
+        f"Level: {difficulty.value}\n\n"
+        f"This is an intensive Deep Study mode — a focused deep-dive into ONE subject.\n"
+        f"The output must be very long, deeply technical, and self-contained.\n"
+        f"Use ALL retrieved context fully — extract every useful detail.\n\n"
+        f"REQUIRED SECTIONS (use ## headings, in this exact order):\n"
+        f"1. **Overview** — scope, purpose, relevance, and where this topic fits "
+        f"in the broader AI/ML engineering stack (3-5 paragraphs).\n"
+        f"2. **Conceptual Foundations** — core theory, formal definitions, mental "
+        f"models, and underlying principles explained with precision. Include "
+        f"mathematical intuition or pseudocode where it aids understanding.\n"
+        f"3. **Architecture / Internal Design** — how the component is structured "
+        f"internally; data flow, key abstractions, extension points. Use ASCII "
+        f"diagrams or structured lists to illustrate architecture.\n"
+        f"4. **Implementation Details** — step-by-step approach with code in "
+        f"```python blocks; cover configuration, parameters, integration points, "
+        f"and environment setup. Show how pieces connect in a real codebase.\n"
+        f"5. **Practical Examples** — at least two realistic, runnable code examples "
+        f"with line-by-line commentary. One should demonstrate basic usage, the "
+        f"other an advanced or production scenario.\n"
+        f"6. **Production Considerations** — scaling, performance tuning, error "
+        f"handling, monitoring, observability hooks, and deployment patterns.\n"
+        f"7. **Common Mistakes & Anti-Patterns** — concrete pitfalls with root-cause "
+        f"explanations and corrective patterns. Before/after code pairs must contain "
+        f"ACTUAL runnable function/class structures, not placeholder-only comments "
+        f"like '# bad approach'. Even illustrative code must show meaningful logic.\n"
+        f"8. **When to Use / When Not to Use** — decision matrix, alternatives, "
+        f"trade-offs, and migration paths from/to competing approaches.\n"
+        f"9. **Comparison Table** — a Markdown table comparing this approach with "
+        f"2-3 alternatives across dimensions like complexity, performance, "
+        f"ecosystem support, and learning curve.\n"
+        f"10. **Review Checklist** — 8-10 verification items an engineer should "
+        f"confirm before shipping code that uses this topic.\n\n"
+        f"QUALITY RULES:\n"
+        f"- Each section must be substantial (multiple paragraphs, not one-liners).\n"
+        f"- Prefer fewer but RICHER subsections over many shallow ones. Avoid many "
+        f"headings with short explanations — minor points should be bullets or "
+        f"smaller subsections, not top-level headings.\n"
+        f"- Each major section should contain substantial academic/professional "
+        f"explanation comparable to a textbook chapter section.\n"
+        f"- Prioritize concrete, actionable engineering content over abstract prose.\n"
+        f"- All code examples must contain actual function/class/logic structure — "
+        f"never use comment-only placeholders. Even illustrative code must be "
+        f"semi-runnable with meaningful structure.\n"
+        f"- Do NOT merge sections or skip any.\n"
+        f"- Do NOT include a 'Topics' list — this is a single-topic deep study.\n"
+        f"- Do NOT pad with filler — every sentence must add information.\n"
+        f"- Use proper Markdown formatting throughout.\n"
         f"{difficulty_instruction}\n"
         f"{personalization}\n"
         f"Use the following sources as reference material.\n"
         f"Synthesize IN YOUR OWN WORDS — do NOT copy source text verbatim.\n"
         f"{sources_text}\n\n"
         f"OUTPUT FORMAT: Return ONLY Markdown text. Do NOT wrap in JSON.\n"
-        f"Do NOT include any JSON structure. Just write the handbook in Markdown."
+        f"Do NOT include any JSON structure. Just write the reference in Markdown."
     )

@@ -14,7 +14,9 @@ from src.graphs.learn_prompts import (
     _build_memory_context,
     _build_prompt,
     _build_deep_study_markdown_prompt,
+    _build_deep_study_topic_markdown_prompt,
     is_deep_study_learn_path,
+    is_deep_study_topic,
 )
 from src.graphs.learn_state import LearningState
 from src.kb.loader import Document
@@ -31,7 +33,7 @@ _MIN_SOURCES = 2
 # Minimum total characters across chunks to consider sources sufficient
 _MIN_CONTENT_CHARS = 200
 # Prompt version — bump to invalidate stale cached outputs
-_PROMPT_VERSION = "v9"
+_PROMPT_VERSION = "v15"
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +345,7 @@ def _extract_summary_from_markdown(markdown: str) -> str:
             paragraph.append(stripped)
         elif paragraph:
             break  # end of first paragraph
-    return " ".join(paragraph[:4]) if paragraph else "Deep Study curriculum handbook."
+    return " ".join(paragraph[:4]) if paragraph else "Deep Study curriculum reference."
 
 
 def _generate_deep_study_learn_path(state: LearningState) -> dict:
@@ -360,14 +362,17 @@ def _generate_deep_study_learn_path(state: LearningState) -> dict:
 
     # --- Check cache ---
     cache_key = _build_learn_cache_key(state)
-    cached = get_cached_value(cache_key)
-    if cached is not None:
-        try:
-            guide = StudyGuide(**cached)
-            trace.append("generate_study_guide: cache hit")
-            return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
-        except Exception:
-            pass
+    if not state.get("force_regenerate"):
+        cached = get_cached_value(cache_key)
+        if cached is not None:
+            try:
+                guide = StudyGuide(**cached)
+                trace.append("generate_study_guide: cache hit")
+                return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+            except Exception:
+                pass
+    else:
+        trace.append("generate_study_guide: cache bypassed (force_regenerate)")
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -460,15 +465,119 @@ def _generate_deep_study_learn_path(state: LearningState) -> dict:
         }
 
 
+def _generate_deep_study_topic(state: LearningState) -> dict:
+    """Dedicated generation flow for Deep Study + single Topic.
+
+    Generates the content as raw Markdown (no JSON) and constructs
+    the StudyGuide object manually.  This avoids the truncated-JSON
+    / malformed-JSON problem that occurs with large outputs.
+    """
+    trace = list(state.get("trace", []))
+    trace.append("generate_study_guide: deep_study_topic flow")
+    token_usage = dict(state.get("token_usage", {}))
+    usage_records = list(state.get("usage_records", []))
+
+    # --- Check cache ---
+    cache_key = _build_learn_cache_key(state)
+    if not state.get("force_regenerate"):
+        cached = get_cached_value(cache_key)
+        if cached is not None:
+            try:
+                guide = StudyGuide(**cached)
+                trace.append("generate_study_guide: cache hit")
+                return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+            except Exception:
+                pass
+    else:
+        trace.append("generate_study_guide: cache bypassed (force_regenerate)")
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        trace.append("generate_study_guide: no API key — using fallback guide")
+        guide = _build_fallback_guide(state)
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+
+    prompt = _build_deep_study_topic_markdown_prompt(state)
+    model = settings.app_default_model
+
+    try:
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        def _llm_call() -> Any:
+            return client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=16384,
+            )
+
+        response = with_retry(
+            callable=_llm_call,
+            max_attempts=2,
+            base_delay=1.0,
+            handled_exceptions=(Exception,),
+        )
+        raw = response.choices[0].message.content or ""
+        usage = response.usage
+        if usage:
+            token_usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0) + (usage.prompt_tokens or 0)
+            token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
+            token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
+
+        usage_dict = {
+            "prompt_tokens": usage.prompt_tokens if usage else 0,
+            "completion_tokens": usage.completion_tokens if usage else 0,
+            "total_tokens": usage.total_tokens if usage else 0,
+        }
+        usage_records.append(build_usage_record(model, "learn_guide_generation", usage_dict))
+
+        trace.append(f"generate_study_guide: LLM returned {len(raw)} chars (markdown)")
+
+        # --- Build StudyGuide manually from markdown ---
+        topic = state.get("topic", "Deep Study")
+        difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+        summary = _extract_summary_from_markdown(raw)
+        sources = _build_sources_list(state)
+
+        guide = StudyGuide(
+            topic=topic,
+            difficulty=difficulty,
+            summary=summary,
+            key_concepts=[topic],
+            detailed_notes=raw.strip(),
+            sources=sources,
+        )
+        trace.append("generate_study_guide: StudyGuide built from markdown")
+
+        # Cache the result
+        try:
+            set_cached_value(cache_key, guide.model_dump(), ttl_seconds=3600)
+            trace.append("generate_study_guide: cached")
+        except Exception:
+            pass
+
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+
+    except Exception as e:
+        logger.error("LLM call failed (deep_study_topic): {}", e)
+        trace.append(f"generate_study_guide: LLM error — {e}, using fallback")
+        guide = _build_fallback_guide(state)
+        return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records, "generation_failed": True}
+
+
 def generate_study_guide(state: LearningState) -> dict:
     """Generate a structured study guide using the LLM.
 
-    For Deep Study + Learn Path, delegates to a dedicated markdown-only
-    flow that avoids JSON parsing of huge content.
+    For Deep Study modes, delegates to dedicated markdown-only flows
+    that avoid JSON parsing of huge content.
     """
     # --- Dedicated flow for Deep Study + Learn Path ---
     if is_deep_study_learn_path(state):
         return _generate_deep_study_learn_path(state)
+
+    # --- Dedicated flow for Deep Study + single Topic ---
+    if is_deep_study_topic(state):
+        return _generate_deep_study_topic(state)
 
     trace = list(state.get("trace", []))
     trace.append("generate_study_guide: started")
@@ -477,14 +586,17 @@ def generate_study_guide(state: LearningState) -> dict:
 
     # --- Check cache ---
     cache_key = _build_learn_cache_key(state)
-    cached = get_cached_value(cache_key)
-    if cached is not None:
-        try:
-            guide = StudyGuide(**cached)
-            trace.append("generate_study_guide: cache hit")
-            return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
-        except Exception:
-            pass  # invalid cache entry — continue to LLM
+    if not state.get("force_regenerate"):
+        cached = get_cached_value(cache_key)
+        if cached is not None:
+            try:
+                guide = StudyGuide(**cached)
+                trace.append("generate_study_guide: cache hit")
+                return {"study_guide": guide, "trace": trace, "token_usage": token_usage, "usage_records": usage_records}
+            except Exception:
+                pass  # invalid cache entry — continue to LLM
+    else:
+        trace.append("generate_study_guide: cache bypassed (force_regenerate)")
 
     settings = get_settings()
     if not settings.openai_api_key:
