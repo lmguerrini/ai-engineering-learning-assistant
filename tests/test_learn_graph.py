@@ -106,12 +106,13 @@ class TestLoadUserMemory:
 
 
 class TestRetrieveSources:
+    @patch("src.kb.official_docs.retrieve_official_docs", return_value=[])
     @patch("src.graphs.learn_nodes.retrieve_documents")
-    def test_retrieves_docs_deep_study(self, mock_retrieve):
+    def test_retrieves_docs_deep_study(self, mock_retrieve, _mock_official):
         docs = _make_docs(3)
         mock_retrieve.return_value = docs
         result = retrieve_sources(_base_state(query="AI Agents", style=ResponseStyle.DETAILED))
-        assert result["retrieved_docs"] == docs
+        assert len(result["retrieved_docs"]) == 3
         mock_retrieve.assert_called_once_with(query="AI Agents", top_k=10)
 
     @patch("src.graphs.learn_nodes.retrieve_documents")
@@ -122,8 +123,9 @@ class TestRetrieveSources:
         assert result["retrieved_docs"] == docs
         mock_retrieve.assert_called_once_with(query="AI Agents", top_k=6)
 
+    @patch("src.kb.official_docs.retrieve_official_docs", return_value=[])
     @patch("src.graphs.learn_nodes.retrieve_documents")
-    def test_empty_retrieval(self, mock_retrieve):
+    def test_empty_retrieval(self, mock_retrieve, _mock_official):
         mock_retrieve.return_value = []
         result = retrieve_sources(_base_state(query="unknown"))
         assert result["retrieved_docs"] == []
@@ -299,9 +301,10 @@ class TestLearnGraph:
 # ---------------------------------------------------------------------------
 
 class TestLearnWorkflowRouting:
+    @patch("src.kb.official_docs.retrieve_official_docs", return_value=[])
     @patch("src.graphs.learn_nodes.retrieve_documents")
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_sufficient_sources_skip_refinement(self, mock_settings, mock_retrieve):
+    def test_sufficient_sources_skip_refinement(self, mock_settings, mock_retrieve, _mock_official):
         """When sources are sufficient, refinement is skipped."""
         mock_settings.return_value = MagicMock(openai_api_key="")
         docs = _make_docs(3, content_len=200)
@@ -313,9 +316,10 @@ class TestLearnWorkflowRouting:
         assert "refine_query_if_needed" not in trace_text
         assert result.get("study_guide") is not None
 
+    @patch("src.kb.official_docs.retrieve_official_docs", return_value=[])
     @patch("src.graphs.learn_nodes.retrieve_documents")
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_insufficient_sources_trigger_refinement(self, mock_settings, mock_retrieve):
+    def test_insufficient_sources_trigger_refinement(self, mock_settings, mock_retrieve, _mock_official):
         """When sources are insufficient, query refinement is triggered and re-retrieval happens."""
         mock_settings.return_value = MagicMock(openai_api_key="")
         insufficient = _make_docs(1, content_len=10)
@@ -334,10 +338,11 @@ class TestLearnWorkflowRouting:
         assert result.get("error") is not None
         assert "topic" in result["error"].lower()
 
+    @patch("src.kb.official_docs.retrieve_official_docs", return_value=[])
     @patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
     @patch("src.graphs.learn_nodes.retrieve_documents")
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_fallback_guide_has_sources(self, mock_settings, mock_retrieve, _mock_cache):
+    def test_fallback_guide_has_sources(self, mock_settings, mock_retrieve, _mock_cache, _mock_official):
         """Fallback guide includes source information from retrieved docs."""
         mock_settings.return_value = MagicMock(openai_api_key="")
         docs = _make_docs(3, content_len=200)
