@@ -95,7 +95,10 @@ def run_learn_workflow(
             "trace": [],
             "token_usage": {},
         }
-        result = app.invoke(initial_state)
+        result = app.invoke(
+            initial_state,
+            config={"run_name": f"learn_workflow:{topic}"},
+        )
         sources_count = len(result.get("retrieved_docs") or [])
         fallback_used = not result.get("source_quality_ok", True)
         logger.info(

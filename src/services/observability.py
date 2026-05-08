@@ -48,11 +48,16 @@ def configure_langsmith_tracing() -> TracingStatus:
         logger.warning("LangSmith tracing enabled but API key is missing.")
         return status
 
-    # Propagate to environment so LangChain/LangGraph picks them up
-    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
-    os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
-    os.environ.setdefault("LANGCHAIN_PROJECT", project)
-    os.environ.setdefault("LANGCHAIN_ENDPOINT", endpoint)
+    # Propagate to environment so LangChain/LangGraph picks them up.
+    # Use direct assignment (not setdefault) so regenerated keys take effect.
+    # Set both LANGCHAIN_* and LANGSMITH_* variants for full SDK compatibility.
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
+    os.environ["LANGCHAIN_PROJECT"] = project
+    os.environ["LANGCHAIN_ENDPOINT"] = endpoint
+    os.environ["LANGSMITH_API_KEY"] = settings.langchain_api_key
+    os.environ["LANGSMITH_PROJECT"] = project
+    os.environ["LANGSMITH_ENDPOINT"] = endpoint
 
     status.enabled = True
     status.has_api_key = True

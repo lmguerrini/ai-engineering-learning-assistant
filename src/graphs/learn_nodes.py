@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from loguru import logger
+from langsmith.wrappers import wrap_openai
 from openai import OpenAI
 
 from src.config import get_settings
@@ -430,7 +431,7 @@ def _generate_deep_study_learn_path(state: LearningState) -> dict:
     model = settings.app_default_model
 
     try:
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = wrap_openai(OpenAI(api_key=settings.openai_api_key))
 
         def _llm_call() -> Any:
             return client.chat.completions.create(
@@ -547,7 +548,7 @@ def _generate_deep_study_topic(state: LearningState) -> dict:
     model = settings.app_default_model
 
     try:
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = wrap_openai(OpenAI(api_key=settings.openai_api_key))
 
         def _llm_call() -> Any:
             return client.chat.completions.create(
@@ -655,7 +656,7 @@ def generate_study_guide(state: LearningState) -> dict:
     model = settings.app_default_model
 
     try:
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = wrap_openai(OpenAI(api_key=settings.openai_api_key))
 
         style = state.get("style", ResponseStyle.CONCISE)
         is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)

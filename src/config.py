@@ -1,5 +1,6 @@
 """Application configuration using pydantic-settings."""
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,11 +16,35 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
 
-    # LangSmith / LangChain tracing
-    langchain_tracing_v2: bool = False
-    langchain_api_key: str = ""
-    langchain_project: str = "ai-engineering-learning-assistant"
-    langchain_endpoint: str = "https://api.smith.langchain.com"
+    # LangSmith / LangChain tracing — accept both LANGCHAIN_* and LANGSMITH_* env vars
+    langchain_tracing_v2: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING",
+            "langchain_tracing_v2", "langsmith_tracing",
+        ),
+    )
+    langchain_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_API_KEY", "LANGSMITH_API_KEY",
+            "langchain_api_key", "langsmith_api_key",
+        ),
+    )
+    langchain_project: str = Field(
+        default="ai-engineering-learning-assistant",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_PROJECT", "LANGSMITH_PROJECT",
+            "langchain_project", "langsmith_project",
+        ),
+    )
+    langchain_endpoint: str = Field(
+        default="https://api.smith.langchain.com",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT",
+            "langchain_endpoint", "langsmith_endpoint",
+        ),
+    )
 
     # App
     app_log_level: str = "DEBUG"
