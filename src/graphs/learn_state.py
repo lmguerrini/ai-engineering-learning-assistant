@@ -16,6 +16,7 @@ class LearningState(TypedDict, total=False):
     topic: str
     difficulty: DifficultyLevel
     style: ResponseStyle
+    force_regenerate: bool
 
     # --- Memory ---
     user_memory: dict[str, Any]
@@ -33,6 +34,7 @@ class LearningState(TypedDict, total=False):
 
     # --- Quality / output ---
     quality_passed: bool
+    generation_failed: bool
     error: str | None
     trace: list[str]
 

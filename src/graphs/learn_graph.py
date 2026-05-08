@@ -77,6 +77,7 @@ def run_learn_workflow(
     topic: str,
     difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE,
     style: ResponseStyle = ResponseStyle.DETAILED,
+    force_regenerate: bool = False,
 ) -> LearningState:
     """Run the full Learn workflow and return the final state.
 
@@ -90,6 +91,7 @@ def run_learn_workflow(
             "topic": topic,
             "difficulty": difficulty,
             "style": style,
+            "force_regenerate": force_regenerate,
             "trace": [],
             "token_usage": {},
         }
