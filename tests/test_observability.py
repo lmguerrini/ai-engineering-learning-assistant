@@ -203,26 +203,26 @@ class TestFormatSourceDisplay:
 
         result = format_source_display(src)
         assert result["title"] == "Untitled"
-        assert result["snippet"] == "_No preview available._"
-        assert result["relevance_label"] == "N/A"
+        assert result["snippet"] == "_No clean preview available._"
+        assert result["relevance_label"] == ""
         assert result["metadata_items"] == []
 
     def test_with_no_attributes(self):
         result = format_source_display(object())
         assert result["title"] == "Untitled"
-        assert result["relevance_label"] == "N/A"
+        assert result["relevance_label"] == ""
 
 
 class TestFormatSourcesSummary:
     def test_no_sources(self):
-        assert format_sources_summary([]) == "No sources used."
-        assert format_sources_summary(None) == "No sources used."
+        assert format_sources_summary([]) == "No source files used."
+        assert format_sources_summary(None) == "No source files used."
 
     def test_single_source(self):
-        assert format_sources_summary(["a"]) == "1 source used."
+        assert format_sources_summary(["a"]) == "1 unique source file displayed."
 
     def test_with_sources(self):
-        assert format_sources_summary(["a", "b", "c"]) == "3 sources used."
+        assert format_sources_summary(["a", "b", "c"]) == "3 unique source files displayed."
 
 
 class TestFormatGraphStateSummary:
@@ -240,7 +240,7 @@ class TestFormatGraphStateSummary:
         fields = format_graph_state_summary(result)
         labels = [f["label"] for f in fields]
         assert "Topic" in labels
-        assert "Sources Retrieved" in labels
+        assert "Passages Retrieved" in labels
         assert "Retrieval Attempts" in labels
         assert "Query Refined" in labels
         assert "Memory Profile" in labels
@@ -249,7 +249,7 @@ class TestFormatGraphStateSummary:
     def test_empty_result(self):
         fields = format_graph_state_summary({})
         labels = [f["label"] for f in fields]
-        assert "Sources Retrieved" in labels
+        assert "Passages Retrieved" in labels
         # Memory profile should show "Not available"
         mem_field = next(f for f in fields if f["label"] == "Memory Profile")
         assert mem_field["value"] == "Not available"
@@ -271,11 +271,17 @@ class TestFormatMemoryTransparency:
         result = format_memory_transparency({})
         assert result["loaded"] is False
 
-    def test_minimal_profile(self):
+    def test_minimal_profile_with_no_data(self):
+        """A profile with only empty lists has no useful data — not loaded."""
         result = format_memory_transparency({"recent_topics": []})
-        assert result["loaded"] is True
+        assert result["loaded"] is False
         assert result["recent_topics"] == []
         assert result["weak_areas"] == []
+
+    def test_minimal_profile_with_data(self):
+        """A profile with at least one real value is loaded."""
+        result = format_memory_transparency({"recent_topics": ["AI"]})
+        assert result["loaded"] is True
 
     def test_full_profile(self):
         profile = {
