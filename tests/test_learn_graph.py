@@ -217,24 +217,21 @@ class TestGenerateStudyGuide:
         assert result["token_usage"]["total_tokens"] == 150
 
     @patch("src.graphs.learn_nodes.get_settings")
-    def test_malformed_json_fallback(self, mock_settings, _cache_set, _cache_get):
+    def test_llm_error_fallback(self, mock_settings, _cache_set, _cache_get):
+        """When the LLM call fails, a fallback guide is returned."""
         mock_settings.return_value = MagicMock(
             openai_api_key="sk-test",
             app_default_model="gpt-4o-mini",
         )
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="not valid json{{{"))]
-        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
-
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_client.chat.completions.create.side_effect = Exception("LLM error")
 
         with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
             result = generate_study_guide(_base_state(retrieved_docs=_make_docs(2)))
 
         guide = result["study_guide"]
         assert isinstance(guide, StudyGuide)
-        assert any("malformed" in t.lower() for t in result["trace"])
+        assert any("error" in t.lower() or "fallback" in t.lower() for t in result["trace"])
 
 
 class TestQualityCheck:
@@ -401,7 +398,7 @@ class TestExtractSummaryFromMarkdown:
 
     def test_fallback_on_empty(self):
         result = _extract_summary_from_markdown("")
-        assert "handbook" in result.lower()
+        assert "deep study" in result.lower()
 
 
 class TestBuildSourcesList:

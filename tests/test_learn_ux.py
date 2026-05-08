@@ -125,7 +125,7 @@ class TestPromptStyleDifferentiation:
         assert "Common Mistakes" in prompt
         assert "When to Use" in prompt
         assert "Review Checklist" in prompt
-        assert "Summary Table" in prompt
+        assert "Comparison Table" in prompt
         assert "Architecture" in prompt
         assert "Practical Examples" in prompt
 
