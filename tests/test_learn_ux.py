@@ -966,10 +966,11 @@ class TestSidebarStatus:
 class TestAppAccentTheme:
     """Non-error interactive accents should use the blue app theme."""
 
-    def test_streamlit_theme_sets_blue_primary_accent(self):
+    def test_streamlit_theme_uses_dark_base_and_blue_primary_accent(self):
         with open(".streamlit/config.toml") as f:
             source = f.read()
         assert "[theme]" in source
+        assert 'base = "dark"' in source
         assert 'primaryColor = "#1565c0"' in source
 
     def test_app_css_overrides_focus_states_to_blue(self):
