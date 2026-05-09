@@ -951,7 +951,9 @@ class TestSidebarStatus:
         assert "KB Index:" in source
         runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
         kb_status = 'st.caption(f"KB Index: {_kb_status}")'
+        model_line = 'st.caption(f"Model: {_s.app_default_model}")'
         assert source.index(runtime_info) < source.index(kb_status)
+        assert source.index(kb_status) < source.index(model_line)
 
     def test_runtime_info_renders_after_active_page(self):
         with open("app.py") as f:
@@ -1455,6 +1457,12 @@ class TestDashboardStructure:
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         assert source.count("st.divider()") >= 6
+
+    def test_sources_copy_explains_source_file_deduplication(self):
+        with open("src/ui/shared.py") as f:
+            source = f.read()
+        assert "deduplicated by source file in this view" in source
+        assert "displayed after deduplication by source file" in source
 
 
 class TestUsageRecordAccumulation:

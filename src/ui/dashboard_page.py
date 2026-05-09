@@ -441,7 +441,7 @@ def _display_kb_health_section() -> None:
     )
 
     if health["status"] == "up_to_date":
-        st.success("KB index is up to date.")
+        st.success("✅ KB index is up to date.")
     elif health["status"] == "metadata_missing":
         st.info(
             "Chroma collections already exist, but no KB health metadata baseline "

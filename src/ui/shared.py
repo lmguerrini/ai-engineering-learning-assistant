@@ -179,7 +179,10 @@ def _display_sources_section(guide: StudyGuide) -> None:
     all_sources = guide.sources if guide else []
     sources = deduplicate_sources(all_sources) if all_sources else []
     st.markdown("#### Sources")
-    st.caption("Sources used to ground this generated learning content.")
+    st.caption(
+        "Sources used to ground this generated learning content. Retrieved passages are "
+        "deduplicated by source file in this view."
+    )
 
     if not sources:
         st.info(
@@ -195,7 +198,7 @@ def _display_sources_section(guide: StudyGuide) -> None:
         file_word = "source" if unique_count == 1 else "sources"
         st.markdown(
             f"_{total_retrieved} context {passage_word} retrieved "
-            f"→ {unique_count} unique {file_word} displayed._"
+            f"→ {unique_count} unique {file_word} displayed after deduplication by source file._"
         )
     else:
         st.markdown(f"_{format_sources_summary(sources)}_")

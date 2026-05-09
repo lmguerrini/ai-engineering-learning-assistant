@@ -41,6 +41,7 @@ class TestDisplayKbHealthSection:
         _display_kb_health_section()
 
         mock_st.subheader.assert_any_call("Knowledge Base Health")
+        mock_st.success.assert_any_call("✅ KB index is up to date.")
         markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
         assert any("| Index Status | Up to date |" in text for text in markdown_calls)
         assert any("| Curated Chunks / Sources | 120 / 10 |" in text for text in markdown_calls)
