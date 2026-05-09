@@ -239,6 +239,7 @@ class TestFormatReport:
         assert "Test Topic" in text
         assert "0.9500" in text
         assert "✅" in text
+        assert "(Beginner)" in text
 
     def test_format_with_error(self):
         report = RAGAsReport(

@@ -1,6 +1,7 @@
 """Tests for Learn UX quality improvements."""
 
 import pytest
+from unittest.mock import patch
 
 from src.schemas import ResponseStyle, DifficultyLevel, Source, StudyGuide
 from src.ui.display_helpers import (
@@ -1427,3 +1428,61 @@ class TestDashboardStructure:
             source = f.read()
         assert "No saved learning memory yet." in source
         assert "No feedback captured yet." in source
+
+
+class TestUsageRecordAccumulation:
+    """Stored usage records should keep the run context needed by the dashboard."""
+
+    @patch("src.ui.shared.st")
+    def test_accumulate_usage_records_adds_learn_context(self, mock_st):
+        from src.ui.shared import _accumulate_usage_records
+
+        mock_st.session_state = {
+            "session_usage_records": [],
+            "last_learn_mode": "Topic",
+            "last_learn_depth": "Deep Study",
+            "last_learn_progressive_streaming": True,
+            "last_learn_force_regenerate": False,
+            "last_learn_result": {"trace": ["Cache miss"]},
+        }
+
+        _accumulate_usage_records([
+            {
+                "model": "gpt-4o-mini",
+                "operation": "learn_guide_section_generation",
+                "total_tokens": 800,
+                "estimated_cost_usd": 0.001,
+            }
+        ])
+
+        record = mock_st.session_state["session_usage_records"][0]
+        assert record["learning_mode"] == "Topic"
+        assert record["learning_depth"] == "Deep Study"
+        assert record["progressive_streaming"] is True
+        assert record["cache_bypass"] is False
+        assert record["cache_hit"] is False
+
+    @patch("src.ui.shared.st")
+    def test_accumulate_usage_records_marks_quiz_context_as_not_applicable(self, mock_st):
+        from src.ui.shared import _accumulate_usage_records
+
+        mock_st.session_state = {
+            "session_usage_records": [],
+            "last_quiz_gen_result": {"trace": ["Cache hit"]},
+        }
+
+        _accumulate_usage_records([
+            {
+                "model": "gpt-4o-mini",
+                "operation": "quiz_generation",
+                "total_tokens": 300,
+                "estimated_cost_usd": 0.0003,
+            }
+        ])
+
+        record = mock_st.session_state["session_usage_records"][0]
+        assert record["learning_mode"] is None
+        assert record["learning_depth"] is None
+        assert record["progressive_streaming"] is None
+        assert record["cache_bypass"] is None
+        assert record["cache_hit"] is True

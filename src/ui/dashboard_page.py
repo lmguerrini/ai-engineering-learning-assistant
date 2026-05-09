@@ -14,8 +14,9 @@ from src.ui.display_helpers import (
 
 def _accumulate_usage_records(records: list[dict]) -> None:
     """Append new usage records to session-level accumulator."""
-    existing = st.session_state.get("session_usage_records", [])
-    st.session_state["session_usage_records"] = existing + records
+    from src.ui.shared import _accumulate_usage_records as _shared_accumulate_usage_records
+
+    _shared_accumulate_usage_records(records)
 
 
 def _get_session_usage_summary() -> dict | None:
@@ -60,6 +61,15 @@ def _format_bool_label(value: bool) -> str:
     return "On" if value else "Off"
 
 
+def _format_context_value(value) -> str:
+    """Format optional context values for reviewer-facing tables."""
+    if value in (None, ""):
+        return "—"
+    if isinstance(value, bool):
+        return _format_bool_label(value)
+    return str(value)
+
+
 def _format_ragas_case_label(result) -> str:
     """Return a reviewer-friendly RAGAs case label."""
     difficulty = getattr(result, "difficulty", "") or ""
@@ -78,8 +88,9 @@ def _display_latest_run_contexts(learn_result: dict, quiz_result: dict) -> None:
     """Render concise run-level context before the raw operation breakdown."""
     st.markdown("#### Latest Run Context")
     st.caption(
-        "Run settings are summarized here. The operation table below shows individual "
-        "LLM calls, which is why progressive Learn runs may appear as multiple rows."
+        "These tables show the latest Learn run and latest Quiz run only. "
+        "The operation table below includes all tracked LLM calls from this app session, "
+        "which is why progressive Learn runs may appear as multiple rows."
     )
 
     learn_col, quiz_col = st.columns(2)
@@ -139,6 +150,11 @@ def _display_session_cost_summary() -> None:
 
     rows = "".join(
         f"| {_operation_category(rec.get('operation', 'unknown'))} | "
+        f"{_format_context_value(rec.get('learning_mode'))} | "
+        f"{_format_context_value(rec.get('learning_depth'))} | "
+        f"{_format_context_value(rec.get('progressive_streaming'))} | "
+        f"{_format_context_value(rec.get('cache_bypass'))} | "
+        f"{_format_context_value(rec.get('cache_hit'))} | "
         f"{rec.get('model', 'Unknown')} | "
         f"{_operation_label(rec.get('operation', 'unknown'))} | "
         f"{rec.get('total_tokens', 0):,} | "
@@ -146,14 +162,14 @@ def _display_session_cost_summary() -> None:
         for rec in records
     )
     st.caption(
-        "Session-level token and cost estimates are aggregated across Learn and Quiz "
-        "runs in this app session. Cache hits typically reuse prior outputs and add no new token usage."
+        "The table below includes all tracked LLM operations from this app session across "
+        "Learn and Quiz. Cache hits typically reuse prior outputs and add no new token usage."
     )
     st.markdown(
-        f"| Run Type | Model | Operation | Tokens | Est. Cost |\n"
-        f"|---|---|---|---|---|\n"
+        f"| Run Type | Learning Mode | Learning Depth | Progressive Streaming | Cache Bypass | Cache Hit | Model | Operation | Tokens | Est. Cost |\n"
+        f"|---|---|---|---|---|---|---|---|---|---|\n"
         f"{rows}"
-        f"| **Total** |  |  | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
+        f"| **Total** |  |  |  |  |  |  |  | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
     )
 
     with st.expander("Raw details"):
@@ -208,7 +224,7 @@ def _ragas_snapshot_value(report) -> str:
     """Return a short reviewer-facing RAGAs readiness label."""
     if report is None:
         return "Not run"
-    return "Ready"
+    return "Latest saved"
 
 
 def _trace_snapshot_value(result: dict, trace_key: str) -> str:
@@ -342,6 +358,10 @@ def _display_ragas_report(report) -> None:
     else:
         failing = [n for n, v in primary_avg if v is None or v < 0.6]
         st.warning(f"⚠️ Primary metrics below threshold: {', '.join(failing)}. Review recommended.")
+    st.caption(
+        "Borderline yellow scores deserve review, but they are not automatic failures. "
+        "Answer Relevancy near the threshold can shift slightly across judge runs."
+    )
 
     # ── Diagnostic metric ────────────────────────────────────────────
     st.markdown("#### Diagnostic Metric")
@@ -445,7 +465,7 @@ def render_advanced() -> None:
     top_cols[1].metric(
         "RAGAs Benchmark",
         _ragas_snapshot_value(ragas_report),
-        help="Ready means a saved benchmark report is available to inspect without rerunning it.",
+        help="Latest saved means a cached benchmark report is available to inspect without rerunning it.",
     )
     top_cols[2].metric(
         "Session Tokens",
@@ -461,8 +481,8 @@ def render_advanced() -> None:
     signal_cols = st.columns(4)
     signal_cols[0].metric(
         "Memory Profile",
-        "Ready" if mem["loaded"] else "Building",
-        help="Personalization becomes richer as study sessions and saved quiz results accumulate.",
+        "Loaded" if mem["loaded"] else "No memory yet",
+        help="Personalization becomes richer after saved quiz results and repeated study sessions accumulate.",
     )
     signal_cols[1].metric(
         "Feedback Entries",

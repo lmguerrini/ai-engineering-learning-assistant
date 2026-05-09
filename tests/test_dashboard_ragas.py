@@ -114,7 +114,7 @@ class TestDashboardSnapshotHelpers:
     """Short reviewer-facing snapshot labels should stay clear."""
 
     def test_ragas_snapshot_value_ready_when_report_present(self):
-        assert _ragas_snapshot_value(object()) == "Ready"
+        assert _ragas_snapshot_value(object()) == "Latest saved"
 
     def test_ragas_snapshot_value_not_run_without_report(self):
         assert _ragas_snapshot_value(None) == "Not run"
@@ -227,6 +227,17 @@ class TestDisplayRagasReport:
         caption_calls = [str(c) for c in mock_st.caption.call_args_list]
         has_diagnostic = any("diagnostic" in c.lower() for c in caption_calls)
         assert has_diagnostic, f"Diagnostic note not found in caption calls: {caption_calls}"
+
+    @patch("src.ui.dashboard_page.st")
+    def test_display_shows_borderline_variance_note(self, mock_st):
+        from src.ui.dashboard_page import _display_ragas_report
+
+        self._setup_mock_st(mock_st)
+        report = self._make_report()
+        _display_ragas_report(report)
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("borderline yellow" in c.lower() for c in caption_calls)
 
     @patch("src.ui.dashboard_page.st")
     def test_display_treats_answer_correctness_as_diagnostic_only_in_case_table(self, mock_st):
@@ -359,3 +370,89 @@ class TestRenderRagasSection:
         info_calls = [str(c) for c in mock_st.info.call_args_list]
         has_cached_msg = any("latest saved benchmark" in c for c in info_calls)
         assert has_cached_msg, f"Cached info message not found in: {info_calls}"
+
+
+class TestDashboardUsageTables:
+    """Session usage tables should clearly separate latest-run and all-session views."""
+
+    @patch("src.ui.dashboard_page.st")
+    def test_latest_run_context_caption_clarifies_scope(self, mock_st):
+        from src.ui.dashboard_page import _display_latest_run_contexts
+
+        mock_st.session_state = {
+            "last_learn_mode": "Topic",
+            "last_learn_depth": "Deep Study",
+            "last_learn_progressive_streaming": True,
+            "last_learn_force_regenerate": False,
+            "quiz_selected_topic": "AI Agents",
+        }
+        mock_st.columns.side_effect = lambda *a, **kw: [
+            MagicMock() for _ in range(a[0] if isinstance(a[0], int) else len(a[0]))
+        ]
+
+        learn_result = {
+            "trace": ["Cache miss"],
+            "token_usage": {"total_tokens": 1200},
+            "usage_records": [{"estimated_cost_usd": 0.0012}],
+        }
+        quiz_result = {
+            "topic": "AI Agents",
+            "trace": ["Cache hit"],
+            "token_usage": {"total_tokens": 300},
+            "usage_records": [{"estimated_cost_usd": 0.0003}],
+        }
+        _display_latest_run_contexts(learn_result, quiz_result)
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("latest learn run and latest quiz run only" in c.lower() for c in caption_calls)
+
+    @patch("src.ui.dashboard_page.st")
+    def test_session_cost_summary_shows_context_columns(self, mock_st):
+        from src.ui.dashboard_page import _display_session_cost_summary
+
+        mock_st.session_state = {
+            "session_usage_records": [
+                {
+                    "model": "gpt-4o-mini",
+                    "operation": "learn_guide_overview_generation",
+                    "total_tokens": 1200,
+                    "prompt_tokens": 800,
+                    "completion_tokens": 400,
+                    "estimated_cost_usd": 0.0012,
+                    "learning_mode": "Topic",
+                    "learning_depth": "Deep Study",
+                    "progressive_streaming": True,
+                    "cache_bypass": False,
+                    "cache_hit": False,
+                },
+                {
+                    "model": "gpt-4o-mini",
+                    "operation": "quiz_generation",
+                    "total_tokens": 300,
+                    "prompt_tokens": 200,
+                    "completion_tokens": 100,
+                    "estimated_cost_usd": 0.0003,
+                    "learning_mode": None,
+                    "learning_depth": None,
+                    "progressive_streaming": None,
+                    "cache_bypass": None,
+                    "cache_hit": True,
+                },
+            ]
+        }
+        mock_st.expander.return_value.__enter__ = MagicMock()
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+
+        _display_session_cost_summary()
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        assert any(
+            "| Run Type | Learning Mode | Learning Depth | Progressive Streaming | Cache Bypass | Cache Hit | Model | Operation | Tokens | Est. Cost |"
+            in text
+            for text in markdown_calls
+        )
+        assert any("| Topic | Deep Study | On | Off | Off |" in text for text in markdown_calls)
+        assert any("| — | — | — | — | On |" in text for text in markdown_calls)
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("all tracked llm operations" in c.lower() for c in caption_calls)

@@ -452,7 +452,8 @@ def format_ragas_report(report: RAGAsReport) -> str:
     ]
 
     for r in report.results:
-        lines.append(f"--- {r.topic} ({r.difficulty}) ---")
+        difficulty_label = (r.difficulty or "").capitalize() or "Unknown"
+        lines.append(f"--- {r.topic} ({difficulty_label}) ---")
         if r.error:
             lines.append(f"  ERROR: {r.error}")
         else:
