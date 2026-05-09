@@ -16,7 +16,7 @@ This assistant solves this by providing:
 
 ## Target User
 
-AI Engineering bootcamp students working through sprints covering LLMs, agents, RAG, LangGraph, evaluation, and production deployment.
+AI Engineering students who need a structured way to build fluency across LLMs, agents, RAG, LangGraph, evaluation, and production deployment.
 
 ---
 
@@ -25,7 +25,7 @@ AI Engineering bootcamp students working through sprints covering LLMs, agents, 
 ```
 ┌─────────────────────────────────────────────────┐
 │                 Streamlit UI                     │
-│  Intro │ Learn │ Quiz │ Progress │ Advanced      │
+│  Home │ Learn │ Quiz │ Progress │ Dashboard      │
 └────────┬──────────────┬─────────────────────────┘
          │              │
     ┌────▼────┐    ┌────▼────┐
@@ -53,7 +53,7 @@ AI Engineering bootcamp students working through sprints covering LLMs, agents, 
 
 | Layer | Description |
 |-------|-------------|
-| **Streamlit UI** | 5-section app: Intro, Learn, Quiz, Progress, Advanced/Debug |
+| **Streamlit UI** | 5-section app: Home, Learn, Quiz, Progress, Dashboard |
 | **LangGraph Workflows** | Explicit state graphs for Learn and Quiz flows |
 | **KB Retrieval** | Curated KB (data/raw) + official docs fallback (data/official_docs) |
 | **Memory** | SQLite-based learning history with HITL approval |
@@ -105,8 +105,8 @@ This loop is controlled by an `attempts` counter (max 2) to prevent infinite ret
 
 ## Curated KB + Official Docs Fallback
 
-- **Curated KB** (`data/raw/`): 13 Markdown files covering AI Agents, RAG, LangChain, LangGraph, prompt engineering, evaluation, memory, HITL, and production patterns. This is the primary retrieval source.
-- **Official Docs** (`data/official_docs/`): 9 curated reference summaries from official documentation (OpenAI, LangChain, LangGraph, LangSmith, Chroma, RAGAs, Streamlit, Pydantic, Loguru). Used as fallback enrichment only when curated KB context is insufficient.
+- **Curated KB** (`data/raw/`): 14 Markdown files covering AI Agents, RAG, LangChain, LangGraph, prompt engineering, evaluation, memory, HITL, and production patterns. This is the primary retrieval source.
+- **Official Docs** (`data/official_docs/`): 14 curated reference summaries from official documentation (OpenAI, LangChain, LangGraph, LangSmith, Chroma, RAGAs, Streamlit, Pydantic, Loguru, and related support topics). Used as fallback enrichment only when curated KB context is insufficient.
 - **Separation**: Official docs are stored in a separate Chroma collection with `source_type="official_docs"` metadata. Domain-aware filtering prioritizes relevant official docs (e.g., LangGraph queries → LangGraph docs).
 
 ## Memory + HITL
@@ -126,7 +126,7 @@ This loop is controlled by an `attempts` counter (max 2) to prevent infinite ret
 
 - Tracks prompt_tokens, completion_tokens, total_tokens, and estimated_cost_usd per LLM operation
 - OpenAI pricing constants for common models (gpt-4o-mini, gpt-4o, gpt-3.5-turbo)
-- Usage records are accumulated per session and displayed in Advanced/Debug
+- Usage records are accumulated per session and displayed in Dashboard
 - Zero-value fallback when token usage is unavailable
 
 ## LangSmith Observability
@@ -134,7 +134,7 @@ This loop is controlled by an `attempts` counter (max 2) to prevent infinite ret
 - **Optional**: Tracing is disabled by default. Enable by setting `LANGCHAIN_TRACING_V2=true` and providing `LANGCHAIN_API_KEY`.
 - **Configuration**: `LANGCHAIN_PROJECT`, `LANGCHAIN_ENDPOINT` supported
 - **Safe no-op**: App runs normally without LangSmith credentials
-- **Visibility**: Advanced/Debug page shows tracing status, project name, endpoint, and API key warning if tracing is enabled but key is missing
+- **Visibility**: Dashboard shows tracing status, project name, endpoint, and API key warning if tracing is enabled but key is missing
 - **Graph logging**: Structured loguru logging at graph run start/end/error
 
 ## Retrieval Validation + RAG Evaluation
@@ -143,7 +143,7 @@ This loop is controlled by an `attempts` counter (max 2) to prevent infinite ret
 - **Retrieval validation** (`src/eval/retrieval_validation.py`): Parses eval cases, runs retrieval, reports hit rate and per-case pass/fail
 - **RAG evaluation** (`src/eval/rag_evaluation.py`): Extends retrieval validation with source coverage metrics and structured reporting
 - **CLI script**: `scripts/run_rag_eval.py` runs offline evaluation without requiring API keys
-- **RAGAs note**: RAGAs is not currently installed. The evaluation framework includes notes on how to enable RAGAs advanced metrics (faithfulness, answer relevancy, context precision) by installing the `ragas` package.
+- **RAGAs benchmark** (`src/eval/ragas_evaluation.py`): saves the latest benchmark locally, shows the cached report in Dashboard, and can be rerun manually with the **Run RAGAs Evaluation** button when an OpenAI API key is configured.
 
 ---
 
@@ -165,13 +165,15 @@ cp .env.example .env
 streamlit run app.py
 ```
 
-The app opens at `http://localhost:8501` with five sections: Intro/Help, Learn, Quiz, Progress/Feedback, and Advanced/Debug.
+The app opens at `http://localhost:8501` with five sections: Home, Learn, Quiz, Progress, and Dashboard.
 
 ## How to Run Tests
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v
+# Run the full test suite in the review-safe configuration
+unset LANGCHAIN_API_KEY LANGCHAIN_ENDPOINT LANGCHAIN_PROJECT LANGCHAIN_TRACING_V2
+unset LANGSMITH_API_KEY LANGSMITH_ENDPOINT LANGSMITH_PROJECT LANGSMITH_TRACING
+python -m pytest tests/ -x -q
 
 # Run a specific test file
 python -m pytest tests/test_learn_graph.py -v
@@ -215,7 +217,7 @@ The refresh script fetches from official documentation URLs and updates files un
 |------|--------|-------|
 | Multi-agent orchestration (LangGraph Learn + Quiz) | ✅ | Two explicit StateGraph workflows |
 | Agentic RAG with source assessment + refinement | ✅ | Quality loop with max 2 attempts |
-| Knowledge base from official docs | ✅ | 9 curated official doc summaries |
+| Knowledge base from official docs | ✅ | 14 curated official doc summaries |
 | RAG evaluation | ✅ | Deterministic offline eval + RAGAs-ready |
 | Long-term memory (SQLite) | ✅ | Learning history with weak area tracking |
 | Human-in-the-loop | ✅ | Save/skip approval for quiz results |
@@ -230,12 +232,12 @@ The refresh script fetches from official documentation URLs and updates files un
 - **No live web scraping**: Official docs are refreshed manually via script, not during app runtime.
 - **Single-user**: No authentication or multi-user session management.
 - **LLM dependency**: Study guide and quiz generation require a valid OpenAI API key. Fallback behavior provides basic placeholder content.
-- **RAGAs not installed**: Advanced evaluation metrics require installing the `ragas` package separately.
+- **RAGAs reruns cost money**: Fresh content-quality evaluations require an OpenAI API key and make judge-model API calls.
 - **No streaming**: LLM responses are generated in full before display.
 
 ## Future Improvements
 
-- Enable RAGAs-based evaluation metrics (faithfulness, context precision, answer relevancy)
+- Add historical RAGAs benchmark tracking and trend comparison
 - Add streaming LLM responses for better UX
 - Implement spaced repetition scheduling based on memory data
 - Add multi-user support with session isolation
@@ -307,4 +309,4 @@ data/
 
 ---
 
-*This project is part of an AI Engineering bootcamp sprint.*
+*Built as an AI Engineering learning project focused on reviewable, traceable agent workflows.*
