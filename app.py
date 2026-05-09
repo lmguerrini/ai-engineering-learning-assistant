@@ -96,6 +96,8 @@ for section_name in SECTIONS:
 
 # Compact sidebar status
 st.sidebar.markdown("---")
+SECTIONS[st.session_state["active_section"]]()
+
 with st.sidebar.expander("Runtime Info", expanded=True):
     try:
         from src.config import get_settings as _get_settings
@@ -114,7 +116,6 @@ with st.sidebar.expander("Runtime Info", expanded=True):
     _total_tokens = sum(r.get("total_tokens", 0) for r in _usage) if _usage else 0
     st.caption(f"Session tokens: {_total_tokens:,}")
 
-    # Live session cost
     try:
         if _usage:
             from src.services.cost_tracker import aggregate_usage as _agg
@@ -125,7 +126,6 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         _cost = 0.0
     st.caption(f"Session cost: ${_cost:.6f}")
 
-# Help section
 with st.sidebar.expander("Help"):
     st.markdown(
         "**1. Learn**\n\n"
@@ -177,5 +177,3 @@ with st.sidebar.expander("Help"):
         "- **Required configuration** — Set `LANGCHAIN_TRACING_V2=true` "
         "and `LANGCHAIN_API_KEY` in your `.env` file."
     )
-
-SECTIONS[st.session_state["active_section"]]()

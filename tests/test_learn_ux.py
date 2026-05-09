@@ -732,6 +732,13 @@ class TestSidebarStatus:
             source = f.read()
         assert "LangSmith:" in source
 
+    def test_runtime_info_renders_after_active_page(self):
+        with open("app.py") as f:
+            source = f.read()
+        page_render = 'SECTIONS[st.session_state["active_section"]]()'
+        runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
+        assert source.index(page_render) < source.index(runtime_info)
+
 
 class TestTopicAwareRetrieval:
     """Learn Path Deep Study should use topic-aware retrieval."""
