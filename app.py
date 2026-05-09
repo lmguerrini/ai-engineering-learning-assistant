@@ -34,6 +34,20 @@ st.markdown(
     section[data-testid="stSidebar"] button {
         text-align: left;
     }
+    /* Use a blue interactive accent so focus/selected states do not read as errors */
+    div[data-baseweb="input"] > div:focus-within,
+    div[data-baseweb="textarea"] > div:focus-within,
+    div[data-baseweb="select"] > div:focus-within {
+        border-color: #1565c0;
+        box-shadow: 0 0 0 1px #1565c0;
+    }
+    .stSlider [data-baseweb="slider"] [role="slider"] {
+        border-color: #1565c0;
+        box-shadow: 0 0 0 1px #1565c0;
+    }
+    .stSlider [data-baseweb="slider"] [role="progressbar"] {
+        background-color: #1565c0;
+    }
     /* Global readable max-width for all page content */
     .block-container {
         max-width: 52rem;

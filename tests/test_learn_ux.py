@@ -963,6 +963,26 @@ class TestSidebarStatus:
         assert source.index(page_render) < source.index(runtime_info)
 
 
+class TestAppAccentTheme:
+    """Non-error interactive accents should use the blue app theme."""
+
+    def test_streamlit_theme_sets_blue_primary_accent(self):
+        with open(".streamlit/config.toml") as f:
+            source = f.read()
+        assert "[theme]" in source
+        assert 'primaryColor = "#1565c0"' in source
+
+    def test_app_css_overrides_focus_states_to_blue(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "focus/selected states do not read as errors" in source
+        assert "div[data-baseweb=\"input\"] > div:focus-within" in source
+        assert "div[data-baseweb=\"textarea\"] > div:focus-within" in source
+        assert "div[data-baseweb=\"select\"] > div:focus-within" in source
+        assert ".stSlider [data-baseweb=\"slider\"] [role=\"slider\"]" in source
+        assert ".stSlider [data-baseweb=\"slider\"] [role=\"progressbar\"]" in source
+
+
 class TestTopicAwareRetrieval:
     """Learn Path Deep Study should use topic-aware retrieval."""
 
