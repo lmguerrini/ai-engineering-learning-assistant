@@ -1350,8 +1350,21 @@ class TestDashboardStructure:
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         # Dashboard should use st.subheader for main sections
-        assert "st.subheader(\"Overview\")" in source
-        assert "st.subheader(\"Costs\")" in source
-        assert "st.subheader(\"Memory\")" in source
-        assert "st.subheader(\"Feedback\")" in source
-        assert "st.subheader(\"Workflow Traces\")" in source
+        assert "st.subheader(\"Review Snapshot\")" in source
+        assert "st.subheader(\"Observability\")" in source
+        assert "st.subheader(\"Token and Cost Tracking\")" in source
+        assert "st.subheader(\"Evaluation Readiness (RAGAs)\")" in source
+        assert "st.subheader(\"Learning Signals\")" in source
+        assert "st.subheader(\"Workflow Readiness\")" in source
+
+    def test_dashboard_highlights_project_strengths(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "**Project Strengths**" in source
+        assert "Cached RAGAs benchmark" in source
+
+    def test_dashboard_uses_snapshot_metrics(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert 'top_cols[0].metric(' in source
+        assert 'signal_cols[0].metric(' in source

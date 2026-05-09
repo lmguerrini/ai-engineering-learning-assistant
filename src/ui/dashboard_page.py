@@ -18,19 +18,34 @@ def _accumulate_usage_records(records: list[dict]) -> None:
     st.session_state["session_usage_records"] = existing + records
 
 
-def _display_session_cost_summary() -> None:
-    """Display aggregated token/cost data for the current session."""
+def _get_session_usage_summary() -> dict | None:
+    """Return aggregated token/cost data for the current session when available."""
     records = st.session_state.get("session_usage_records", [])
     if not records:
-        st.info("No usage data yet. Generate a Learn Path or quiz to see cost estimates.")
-        return
+        return None
 
     from src.services.cost_tracker import aggregate_usage
 
-    summary = aggregate_usage(records)
+    return aggregate_usage(records)
+
+
+def _display_session_cost_summary() -> None:
+    """Display aggregated token/cost data for the current session."""
+    records = st.session_state.get("session_usage_records", [])
+    summary = _get_session_usage_summary()
+    if not summary:
+        st.info(
+            "No session usage data yet. Generate a Learn topic or quiz to populate "
+            "token and cost tracking."
+        )
+        return
     rows = "".join(
         f"| {op['operation']} | {op['total_tokens']:,} | ${op['estimated_cost_usd']:.6f} |\n"
         for op in summary["operations"]
+    )
+    st.caption(
+        "Session-level token and cost estimates are aggregated across Learn and Quiz "
+        "runs in this app session."
     )
     st.markdown(
         f"| Operation | Tokens | Est. Cost |\n"
@@ -74,14 +89,76 @@ def _fmt_metric(value: float | None) -> str:
     return f"{value:.4f}" if value is not None else "N/A"
 
 
+def _get_ragas_report():
+    """Load the latest cached RAGAs report into session state when available."""
+    if "ragas_report" in st.session_state:
+        return st.session_state["ragas_report"]
+
+    from src.eval.ragas_evaluation import load_ragas_results
+
+    cached = load_ragas_results()
+    if cached is not None:
+        st.session_state["ragas_report"] = cached
+    return cached
+
+
+def _ragas_snapshot_value(report) -> str:
+    """Return a short reviewer-facing RAGAs readiness label."""
+    if report is None:
+        return "Not run"
+    return "Ready"
+
+
+def _trace_snapshot_value(result: dict, trace_key: str) -> str:
+    """Return a short workflow readiness label from stored trace state."""
+    trace = result.get("trace") or st.session_state.get(trace_key, [])
+    return "Ready" if trace or result else "No run yet"
+
+
+def _display_workflow_trace_panel(
+    title: str,
+    result: dict,
+    *,
+    trace_key: str,
+    tokens_key: str,
+    empty_message: str,
+) -> None:
+    """Render one workflow-readiness panel with concise summary and raw trace details."""
+    with st.expander(title):
+        trace = result.get("trace") or st.session_state.get(trace_key, [])
+        if not trace and not result:
+            st.info(empty_message)
+            return
+
+        fields = format_graph_state_summary(result) if result else []
+        if fields:
+            st.markdown("**Run summary**")
+            for field in fields:
+                st.markdown(f"- **{field['label']}:** {field['value']}")
+
+        tokens = result.get("token_usage") or st.session_state.get(tokens_key, {})
+        if tokens and tokens.get("total_tokens"):
+            st.caption(
+                f"Tokens: {tokens.get('total_tokens', 0):,} "
+                f"(prompt: {tokens.get('prompt_tokens', 0):,}, "
+                f"completion: {tokens.get('completion_tokens', 0):,})"
+            )
+
+        with st.expander("Raw trace"):
+            if trace:
+                for entry in trace:
+                    st.text(entry)
+            else:
+                st.info("No trace entries.")
+
+
 def _render_ragas_section() -> None:
     """Render the RAGAs Content Quality Evaluation section."""
-    st.subheader("Content Quality Evaluation (RAGAs)")
+    st.subheader("Evaluation Readiness (RAGAs)")
     st.markdown(
-        "RAGAs evaluates the **quality of generated Learn content** — not only "
-        "retrieval accuracy, but also faithfulness to sources, answer relevancy, "
-        "and context utilisation. It uses an LLM judge to score real generated "
-        "study guides against retrieved contexts and reference answers."
+        "RAGAs scores generated Learn content for faithfulness, relevancy, and "
+        "context use. The saved benchmark is review-safe to inspect; reruns stay "
+        "manual because they call an LLM judge and cost money."
     )
 
     available, reason = _check_ragas_available()
@@ -90,12 +167,7 @@ def _render_ragas_section() -> None:
         return
 
     # Show cached results if available and no live report yet
-    if "ragas_report" not in st.session_state:
-        from src.eval.ragas_evaluation import load_ragas_results
-
-        cached = load_ragas_results()
-        if cached is not None:
-            st.session_state["ragas_report"] = cached
+    _get_ragas_report()
 
     st.info(
         "💡 Results below are from the **latest saved benchmark**. "
@@ -218,30 +290,115 @@ def render_advanced() -> None:
     """Render the Dashboard section."""
     st.header("Dashboard")
     st.markdown(
-        "Application overview, observability, cost tracking, "
-        "and workflow diagnostics."
+        "Reviewer-facing overview of observability, evaluation, cost tracking, "
+        "learning signals, and workflow readiness."
     )
 
-    # ── Overview ──────────────────────────────────────────────────────────
-    st.subheader("Overview")
     from src.config import get_settings
     from src.services.observability import format_tracing_status, get_tracing_status
 
     settings = get_settings()
     status = get_tracing_status()
     info = format_tracing_status(status)
+    ragas_report = _get_ragas_report()
+    session_usage = _get_session_usage_summary()
+    learn_result = st.session_state.get("last_learn_result", {})
+    quiz_result = st.session_state.get("last_quiz_gen_result", {})
 
-    api_ok = "Configured" if settings.openai_api_key else "Missing"
-    st.markdown(
-        f"| Setting | Value |\n"
-        f"|---|---|\n"
-        f"| OpenAI API | {api_ok} |\n"
-        f"| Model | {settings.app_default_model} |\n"
-        f"| LangSmith | {info['status_label']} |\n"
-        f"| Project | {info['project']} |\n"
-        f"| Embedding | {settings.embedding_model} |\n"
-        f"| Chunk Size / Overlap | {settings.chunk_size} / {settings.chunk_overlap} |"
+    try:
+        from src.memory.memory_service import get_user_profile_summary
+
+        profile = get_user_profile_summary()
+        mem = format_memory_transparency(profile)
+    except Exception:
+        profile = None
+        mem = format_memory_transparency(None)
+
+    from src.memory.feedback_service import get_feedback_summary
+
+    fb_summary = get_feedback_summary()
+
+    # ── Review Snapshot ───────────────────────────────────────────────────
+    st.subheader("Review Snapshot")
+    st.caption(
+        "The most important review signals are surfaced first; detailed diagnostics "
+        "remain available farther down the page."
     )
+    top_cols = st.columns(4)
+    top_cols[0].metric(
+        "LangSmith Tracing",
+        info["status_label"],
+        help="Tracing configuration used for observability and workflow review.",
+    )
+    top_cols[1].metric(
+        "RAGAs Benchmark",
+        _ragas_snapshot_value(ragas_report),
+        help="Ready means a saved benchmark report is available to inspect without rerunning it.",
+    )
+    top_cols[2].metric(
+        "Session Tokens",
+        f"{session_usage['total_tokens']:,}" if session_usage else "—",
+        help="Session-level token usage aggregated across Learn and Quiz runs.",
+    )
+    top_cols[3].metric(
+        "Session Cost",
+        f"${session_usage['estimated_cost_usd']:.6f}" if session_usage else "—",
+        help="Estimated session-level cost based on tracked token usage.",
+    )
+
+    signal_cols = st.columns(4)
+    signal_cols[0].metric(
+        "Memory Profile",
+        "Ready" if mem["loaded"] else "Building",
+        help="Personalization becomes richer as study sessions and saved quiz results accumulate.",
+    )
+    signal_cols[1].metric(
+        "Feedback Entries",
+        str(fb_summary.get("total_count", 0)),
+        help="Captured rating/comment signals from Learn and Quiz feedback widgets.",
+    )
+    signal_cols[2].metric(
+        "Learn Workflow",
+        _trace_snapshot_value(learn_result, "last_learn_trace"),
+        help="Whether a Learn run is available for trace inspection.",
+    )
+    signal_cols[3].metric(
+        "Quiz Workflow",
+        _trace_snapshot_value(quiz_result, "last_quiz_trace"),
+        help="Whether a Quiz run is available for trace inspection.",
+    )
+
+    st.markdown("**Project Strengths**")
+    st.markdown(
+        "- LangGraph workflows with reviewer-visible traces and LangSmith observability.\n"
+        "- Cached RAGAs benchmark for evaluation readiness, with reruns kept manual and cost-aware.\n"
+        "- Session-level token and cost tracking across Learn and Quiz.\n"
+        "- Personalization signals from learning memory and feedback summaries."
+    )
+
+    # ── Observability ─────────────────────────────────────────────────────
+    st.subheader("Observability")
+    st.caption("High-level runtime configuration for tracing, model selection, and retrieval setup.")
+    api_ok = "Configured" if settings.openai_api_key else "Missing"
+    obs_left, obs_right = st.columns(2)
+    with obs_left:
+        st.markdown(
+            f"| Setting | Value |\n"
+            f"|---|---|\n"
+            f"| OpenAI API | {api_ok} |\n"
+            f"| Model | {settings.app_default_model} |\n"
+            f"| LangSmith | {info['status_label']} |\n"
+            f"| Project | {info['project']} |"
+        )
+    with obs_right:
+        st.markdown(
+            f"| Setting | Value |\n"
+            f"|---|---|\n"
+            f"| Embedding | {settings.embedding_model} |\n"
+            f"| Chunk Size / Overlap | {settings.chunk_size} / {settings.chunk_overlap} |\n"
+            f"| Learn Trace Ready | {_trace_snapshot_value(learn_result, 'last_learn_trace')} |\n"
+            f"| Quiz Trace Ready | {_trace_snapshot_value(quiz_result, 'last_quiz_trace')} |"
+        )
 
     with st.expander("All application settings"):
         st.json({
@@ -256,20 +413,19 @@ def render_advanced() -> None:
             "api_key_configured": bool(settings.openai_api_key),
         })
 
-    # ── Costs ─────────────────────────────────────────────────────────────
-    st.subheader("Costs")
+    # ── Token and Cost Tracking ───────────────────────────────────────────
+    st.subheader("Token and Cost Tracking")
     _display_session_cost_summary()
 
     # ── Content Quality Evaluation (RAGAs) ─────────────────────────────
     _render_ragas_section()
 
-    # ── Memory ────────────────────────────────────────────────────────────
-    st.subheader("Memory")
-    try:
-        from src.memory.memory_service import get_user_profile_summary
-
-        profile = get_user_profile_summary()
-        mem = format_memory_transparency(profile)
+    # ── Learning Signals ──────────────────────────────────────────────────
+    st.subheader("Learning Signals")
+    st.caption("Memory and feedback summarize how the assistant can personalize future runs.")
+    memory_col, feedback_col = st.columns(2)
+    with memory_col:
+        st.markdown("#### Memory and Progress")
         if mem["loaded"]:
             avg = f"{mem['average_score']:.0f}%" if mem.get("average_score") is not None else "—"
             weak = ", ".join(mem.get("weak_areas", [])) or "—"
@@ -285,80 +441,43 @@ def render_advanced() -> None:
             )
         else:
             st.info(
-                "Memory profile will be built automatically as you study "
-                "and save quiz results."
+                "Memory signals will accumulate as you study and save quiz results."
             )
-    except Exception:
-        st.info("Memory profile not available.")
+    with feedback_col:
+        st.markdown("#### Feedback Signals")
+        if fb_summary.get("total_count", 0) > 0:
+            suggestion = fb_summary.get("suggestion", "—") or "—"
+            st.markdown(
+                f"| Field | Value |\n"
+                f"|---|---|\n"
+                f"| Average Rating | {fb_summary['average_rating']}/5 |\n"
+                f"| Total Entries | {fb_summary['total_count']} |\n"
+                f"| Suggestion | {suggestion} |"
+            )
+            with st.expander("Raw feedback details"):
+                st.json(fb_summary)
+        else:
+            st.info(
+                "No feedback captured yet. Submit ratings from Learn or Quiz to populate reviewer-visible signals."
+            )
 
-    # ── Feedback ──────────────────────────────────────────────────────────
-    st.subheader("Feedback")
-    from src.memory.feedback_service import get_feedback_summary
-
-    fb_summary = get_feedback_summary()
-    if fb_summary.get("total_count", 0) > 0:
-        suggestion = fb_summary.get("suggestion", "—") or "—"
-        st.markdown(
-            f"| Field | Value |\n"
-            f"|---|---|\n"
-            f"| Average Rating | {fb_summary['average_rating']}/5 |\n"
-            f"| Total Entries | {fb_summary['total_count']} |\n"
-            f"| Suggestion | {suggestion} |"
+    # ── Workflow Readiness ────────────────────────────────────────────────
+    st.subheader("Workflow Readiness")
+    st.caption("Latest Learn and Quiz runs stay inspectable here, with raw traces tucked into expanders.")
+    learn_col, quiz_col = st.columns(2)
+    with learn_col:
+        _display_workflow_trace_panel(
+            "Learn Workflow Trace",
+            learn_result,
+            trace_key="last_learn_trace",
+            tokens_key="last_learn_tokens",
+            empty_message="No Learn trace available yet. Generate a Learn run first.",
         )
-        with st.expander("Raw feedback details"):
-            st.json(fb_summary)
-    else:
-        st.info("No feedback data yet.")
-
-    # ── Workflow Traces ───────────────────────────────────────────────────
-    st.subheader("Workflow Traces")
-
-    # Learn trace
-    with st.expander("Learn Workflow Trace"):
-        learn_result = st.session_state.get("last_learn_result", {})
-        trace = learn_result.get("trace") or st.session_state.get("last_learn_trace", [])
-        if trace or learn_result:
-            fields = format_graph_state_summary(learn_result) if learn_result else []
-            if fields:
-                for f in fields:
-                    st.markdown(f"- **{f['label']}:** {f['value']}")
-            tokens = learn_result.get("token_usage") or st.session_state.get("last_learn_tokens", {})
-            if tokens and tokens.get("total_tokens"):
-                st.markdown(
-                    f"**Tokens:** {tokens.get('total_tokens', 0):,} "
-                    f"(prompt: {tokens.get('prompt_tokens', 0):,}, "
-                    f"completion: {tokens.get('completion_tokens', 0):,})"
-                )
-            with st.expander("Raw trace"):
-                if trace:
-                    for entry in trace:
-                        st.text(entry)
-                else:
-                    st.info("No trace entries.")
-        else:
-            st.info("No trace available yet. Generate a Learn Path first.")
-
-    # Quiz trace
-    with st.expander("Quiz Workflow Trace"):
-        quiz_gen = st.session_state.get("last_quiz_gen_result", {})
-        trace = quiz_gen.get("trace") or st.session_state.get("last_quiz_trace", [])
-        if trace or quiz_gen:
-            fields = format_graph_state_summary(quiz_gen) if quiz_gen else []
-            if fields:
-                for f in fields:
-                    st.markdown(f"- **{f['label']}:** {f['value']}")
-            tokens = quiz_gen.get("token_usage") or st.session_state.get("last_quiz_tokens", {})
-            if tokens and tokens.get("total_tokens"):
-                st.markdown(
-                    f"**Tokens:** {tokens.get('total_tokens', 0):,} "
-                    f"(prompt: {tokens.get('prompt_tokens', 0):,}, "
-                    f"completion: {tokens.get('completion_tokens', 0):,})"
-                )
-            with st.expander("Raw trace"):
-                if trace:
-                    for entry in trace:
-                        st.text(entry)
-                else:
-                    st.info("No trace entries.")
-        else:
-            st.info("No quiz trace available yet. Generate a quiz first.")
+    with quiz_col:
+        _display_workflow_trace_panel(
+            "Quiz Workflow Trace",
+            quiz_result,
+            trace_key="last_quiz_trace",
+            tokens_key="last_quiz_tokens",
+            empty_message="No Quiz trace available yet. Generate and evaluate a quiz first.",
+        )

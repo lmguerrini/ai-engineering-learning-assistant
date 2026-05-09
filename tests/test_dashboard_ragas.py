@@ -8,6 +8,7 @@ from src.ui.dashboard_page import (
     _check_ragas_available,
     _metric_color,
     _fmt_metric,
+    _ragas_snapshot_value,
 )
 
 
@@ -101,6 +102,20 @@ class TestFmtMetric:
 
     def test_rounding(self):
         assert _fmt_metric(0.12345) == "0.1235"
+
+
+# ---------------------------------------------------------------------------
+# Dashboard snapshot helpers
+# ---------------------------------------------------------------------------
+
+class TestDashboardSnapshotHelpers:
+    """Short reviewer-facing snapshot labels should stay clear."""
+
+    def test_ragas_snapshot_value_ready_when_report_present(self):
+        assert _ragas_snapshot_value(object()) == "Ready"
+
+    def test_ragas_snapshot_value_not_run_without_report(self):
+        assert _ragas_snapshot_value(None) == "Not run"
 
 
 # ---------------------------------------------------------------------------
