@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	validate_input(validate_input)
+	load_user_memory(load_user_memory)
+	retrieve_sources(retrieve_sources)
+	assess_source_quality(assess_source_quality)
+	refine_query_if_needed(refine_query_if_needed)
+	generate_study_guide(generate_study_guide)
+	quality_check(quality_check)
+	persist_learning_event_placeholder(persist_learning_event_placeholder)
+	return_output(return_output)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> validate_input;
+	assess_source_quality -. generate_path .-> generate_study_guide;
+	assess_source_quality -. refine_path .-> refine_query_if_needed;
+	generate_study_guide --> quality_check;
+	load_user_memory --> retrieve_sources;
+	persist_learning_event_placeholder --> return_output;
+	quality_check --> persist_learning_event_placeholder;
+	refine_query_if_needed --> retrieve_sources;
+	retrieve_sources --> assess_source_quality;
+	validate_input -. success_path .-> load_user_memory;
+	validate_input -. error_path .-> return_output;
+	return_output --> __end__;
+	classDef default fill:#f8fafc,color:#111827,stroke:#94a3b8,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#0f172a,color:#fff

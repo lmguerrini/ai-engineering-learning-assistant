@@ -27,17 +27,17 @@ from src.schemas import DifficultyLevel, ResponseStyle
 def _route_after_validation(state: LearningState) -> str:
     """Route to END if validation failed, otherwise continue."""
     if state.get("error"):
-        return "return_output"
-    return "load_user_memory"
+        return "error_path"
+    return "success_path"
 
 
 def _route_after_assessment(state: LearningState) -> str:
     """Route based on source quality: refine or proceed to generation."""
     if state.get("source_quality_ok"):
-        return "generate_study_guide"
+        return "generate_path"
     if state.get("attempts", 0) >= 2:
-        return "generate_study_guide"
-    return "refine_query_if_needed"
+        return "generate_path"
+    return "refine_path"
 
 
 def build_learn_graph() -> StateGraph:
@@ -55,10 +55,18 @@ def build_learn_graph() -> StateGraph:
     graph.add_node("return_output", return_output)
 
     graph.add_edge(START, "validate_input")
-    graph.add_conditional_edges("validate_input", _route_after_validation)
+    graph.add_conditional_edges(
+        "validate_input",
+        _route_after_validation,
+        {"error_path": "return_output", "success_path": "load_user_memory"},
+    )
     graph.add_edge("load_user_memory", "retrieve_sources")
     graph.add_edge("retrieve_sources", "assess_source_quality")
-    graph.add_conditional_edges("assess_source_quality", _route_after_assessment)
+    graph.add_conditional_edges(
+        "assess_source_quality",
+        _route_after_assessment,
+        {"generate_path": "generate_study_guide", "refine_path": "refine_query_if_needed"},
+    )
     graph.add_edge("refine_query_if_needed", "retrieve_sources")
     graph.add_edge("generate_study_guide", "quality_check")
     graph.add_edge("quality_check", "persist_learning_event_placeholder")
