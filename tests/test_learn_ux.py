@@ -665,6 +665,94 @@ class TestLearnStreamingHelpers:
         assert blocks[1] == "```python\nx = 1\n\nprint(x)\n```\n"
         assert blocks[2] == "Closing paragraph."
 
+    def test_append_only_markdown_delta_returns_suffix(self):
+        from src.ui.learn_page import _get_append_only_markdown_delta
+
+        previous = "Overview paragraph.\n\n"
+        current = previous + "Next paragraph.\n\n```python\nprint('done')\n```"
+        assert _get_append_only_markdown_delta(previous, current) == (
+            "Next paragraph.\n\n```python\nprint('done')\n```"
+        )
+
+    def test_append_only_markdown_delta_rejects_non_prefix_update(self):
+        from src.ui.learn_page import _get_append_only_markdown_delta
+
+        previous = "Overview paragraph.\n\n"
+        current = "Updated overview paragraph.\n\n"
+        assert _get_append_only_markdown_delta(previous, current) is None
+
+    def test_stream_markdown_delta_replays_only_new_blocks(self):
+        from unittest.mock import patch
+
+        from src.ui.learn_page import _stream_markdown_delta
+
+        class _Placeholder:
+            def __init__(self):
+                self.calls = []
+
+            def markdown(self, text, unsafe_allow_html=False):
+                self.calls.append((text, unsafe_allow_html))
+
+        previous = "Overview paragraph.\n\n"
+        current = (
+            previous
+            + "Next paragraph.\n\n"
+            + "```python\nprint('done')\n```"
+        )
+        placeholder = _Placeholder()
+
+        with patch("src.ui.learn_page.st.empty", return_value=placeholder):
+            _stream_markdown_delta(previous, current)
+
+        assert placeholder.calls[0] == (previous, False)
+        assert placeholder.calls[-1] == (current, False)
+        assert any("Next paragraph." in rendered for rendered, _ in placeholder.calls[1:])
+        assert any("```python\nprint('done')\n```" in rendered for rendered, _ in placeholder.calls[1:])
+
+    def test_display_study_guide_uses_progressive_previous_for_delta_replay(self):
+        from unittest.mock import call, patch
+
+        from src.ui.learn_page import _clean_generated_markdown, _display_study_guide
+
+        previous = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Overview paragraph.",
+            key_concepts=["Autonomy: choose actions"],
+            detailed_notes="## Conceptual Foundations\nPrior section text.",
+        )
+        current = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Overview paragraph.",
+            key_concepts=["Autonomy: choose actions"],
+            detailed_notes=(
+                "## Conceptual Foundations\nPrior section text.\n\n"
+                "## Practical Examples\nNew section text."
+            ),
+        )
+        previous_notes = downgrade_headings(
+            _clean_generated_markdown(previous.detailed_notes, previous, "Deep Study", "Topic")
+        )
+        current_notes = downgrade_headings(
+            _clean_generated_markdown(current.detailed_notes, current, "Deep Study", "Topic")
+        )
+
+        with patch("src.ui.learn_page._stream_markdown_delta") as stream_delta, \
+             patch("src.ui.learn_page.st") as mock_st:
+            _display_study_guide(
+                current,
+                depth="Deep Study",
+                mode="Topic",
+                include_sources=False,
+                show_topic_key_concepts=True,
+                progressive_previous=previous,
+            )
+
+        assert call(previous.summary, current.summary) in stream_delta.call_args_list
+        assert call(previous_notes, current_notes, unsafe_allow_html=False) in stream_delta.call_args_list
+        mock_st.subheader.assert_called_once_with("AI Agents")
+
     def test_display_learn_result_passes_stream_flag_to_study_guide(self):
         from unittest.mock import patch
 

@@ -138,6 +138,48 @@ def _stream_markdown(text: str, *, unsafe_allow_html: bool = False) -> None:
     placeholder.markdown(text, unsafe_allow_html=unsafe_allow_html)
 
 
+def _get_append_only_markdown_delta(previous_text: str, current_text: str) -> str | None:
+    """Return the appended suffix when the new markdown only extends the old text."""
+    previous = previous_text or ""
+    current = current_text or ""
+    if not previous:
+        return current
+    if current.startswith(previous):
+        return current[len(previous):]
+    return None
+
+
+def _stream_markdown_delta(
+    previous_text: str,
+    current_text: str,
+    *,
+    unsafe_allow_html: bool = False,
+) -> None:
+    """Replay only the newly appended markdown blocks for smoother progressive UI updates."""
+    if not current_text:
+        return
+
+    delta = _get_append_only_markdown_delta(previous_text, current_text)
+    if delta is None:
+        st.markdown(current_text, unsafe_allow_html=unsafe_allow_html)
+        return
+
+    placeholder = st.empty()
+    rendered = previous_text or ""
+    if rendered:
+        placeholder.markdown(rendered, unsafe_allow_html=unsafe_allow_html)
+
+    if not delta:
+        placeholder.markdown(current_text, unsafe_allow_html=unsafe_allow_html)
+        return
+
+    for chunk in _iter_markdown_blocks(delta):
+        rendered += chunk
+        placeholder.markdown(rendered, unsafe_allow_html=unsafe_allow_html)
+
+    placeholder.markdown(current_text, unsafe_allow_html=unsafe_allow_html)
+
+
 # ---------------------------------------------------------------------------
 # Learn helpers
 # ---------------------------------------------------------------------------
@@ -145,7 +187,8 @@ def _stream_markdown(text: str, *, unsafe_allow_html: bool = False) -> None:
 def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
                          mode: str = "Topic", stream: bool = False,
                          include_sources: bool = True,
-                         show_topic_key_concepts: bool = False) -> None:
+                         show_topic_key_concepts: bool = False,
+                         progressive_previous: StudyGuide | None = None) -> None:
     """Render a structured Learn Path in the Streamlit UI."""
     if mode == "Learn Path":
         level_label = guide.difficulty.value.capitalize()
@@ -159,6 +202,8 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
     st.markdown("#### Overview")
     if stream:
         _stream_markdown(guide.summary)
+    elif progressive_previous is not None:
+        _stream_markdown_delta(progressive_previous.summary, guide.summary)
     else:
         st.markdown(guide.summary)
 
@@ -236,10 +281,25 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
     if guide.detailed_notes:
         notes = _clean_generated_markdown(guide.detailed_notes, guide, depth, mode)
         notes = downgrade_headings(notes)
+        previous_notes = ""
+        if progressive_previous and progressive_previous.detailed_notes:
+            previous_notes = _clean_generated_markdown(
+                progressive_previous.detailed_notes,
+                progressive_previous,
+                depth,
+                mode,
+            )
+            previous_notes = downgrade_headings(previous_notes)
         # Learn Path Deep Study injects HTML <a id="..."> anchors for topic links
         _has_html = '<a id="' in notes
         if stream:
             _stream_markdown(notes, unsafe_allow_html=_has_html)
+        elif progressive_previous is not None:
+            _stream_markdown_delta(
+                previous_notes,
+                notes,
+                unsafe_allow_html=_has_html,
+            )
         else:
             st.markdown(notes, unsafe_allow_html=_has_html)
 
@@ -426,11 +486,13 @@ def render_learn() -> None:
     generate = st.button(btn_label, key="btn_learn")
     displayed_result_this_run = False
     progressive_result_slot = st.empty() if generate else None
+    progressive_render_state = {"last_guide": None}
 
     if generate:
         def _progress_callback(progress_guide: StudyGuide) -> None:
             if progressive_result_slot is None:
                 return
+            previous_guide = progressive_render_state["last_guide"]
             with progressive_result_slot.container():
                 _display_study_guide(
                     progress_guide,
@@ -438,7 +500,9 @@ def render_learn() -> None:
                     mode=learning_mode,
                     include_sources=False,
                     show_topic_key_concepts=True,
+                    progressive_previous=previous_guide,
                 )
+            progressive_render_state["last_guide"] = progress_guide
 
         if learning_mode != "Learn Path":
             spinner_msg = "Generating topic — this may take a moment…"
