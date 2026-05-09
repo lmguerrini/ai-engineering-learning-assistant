@@ -594,6 +594,111 @@ class TestLearnSubtitle:
         assert "Learn Path" in source
 
 
+class TestLearnStreamingHelpers:
+    """Learn streaming should stay UI-only and preserve safe boundaries."""
+
+    def test_should_stream_fresh_result(self):
+        from src.ui.learn_page import _should_stream_learn_result
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"study_guide": guide, "trace": ["generate_study_guide: done"]}
+        assert _should_stream_learn_result(result) is True
+
+    def test_should_not_stream_cache_hit(self):
+        from src.ui.learn_page import _should_stream_learn_result
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"study_guide": guide, "trace": ["generate_study_guide: cache hit"]}
+        assert _should_stream_learn_result(result) is False
+
+    def test_should_not_stream_failed_result(self):
+        from src.ui.learn_page import _should_stream_learn_result
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {
+            "study_guide": guide,
+            "trace": ["generate_study_guide: done"],
+            "generation_failed": True,
+        }
+        assert _should_stream_learn_result(result) is False
+
+    def test_iter_markdown_blocks_groups_paragraphs(self):
+        from src.ui.learn_page import _iter_markdown_blocks
+
+        text = "First paragraph.\n\nSecond paragraph."
+        assert list(_iter_markdown_blocks(text)) == [
+            "First paragraph.\n\n",
+            "Second paragraph.",
+        ]
+
+    def test_iter_markdown_blocks_keeps_fenced_code_together(self):
+        from src.ui.learn_page import _iter_markdown_blocks
+
+        text = (
+            "Intro paragraph.\n\n"
+            "```python\n"
+            "x = 1\n\n"
+            "print(x)\n"
+            "```\n\n"
+            "Closing paragraph."
+        )
+        blocks = list(_iter_markdown_blocks(text))
+        assert blocks[0] == "Intro paragraph.\n\n"
+        assert blocks[1] == "```python\nx = 1\n\nprint(x)\n```\n"
+        assert blocks[2] == "Closing paragraph."
+
+    def test_display_learn_result_passes_stream_flag_to_study_guide(self):
+        from unittest.mock import patch
+
+        from src.ui.learn_page import _display_learn_result
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"study_guide": guide, "trace": ["generate_study_guide: done"]}
+
+        with patch("src.ui.learn_page._display_study_guide") as display_guide, \
+             patch("src.ui.learn_page._display_memory_section") as display_memory, \
+             patch("src.ui.learn_page._display_debug_trace") as display_trace:
+            _display_learn_result(
+                result,
+                depth="Deep Study",
+                mode="Topic",
+                stream=True,
+            )
+
+        display_guide.assert_called_once_with(
+            guide,
+            depth="Deep Study",
+            mode="Topic",
+            stream=True,
+        )
+        display_memory.assert_called_once_with(result)
+        display_trace.assert_called_once_with(result, "Learn Workflow Trace")
+
+
 class TestQuizUiCopy:
     """Quiz page labels should match the current workflow terminology."""
 

@@ -1,6 +1,7 @@
 """Streamlit Learn page renderer."""
 
 import re
+from typing import Iterator
 
 import streamlit as st
 
@@ -50,17 +51,86 @@ def _show_cached_learn_result() -> None:
     result = st.session_state.get("last_learn_result")
     if not result:
         return
+    depth = st.session_state.get("last_learn_depth", "Summary")
+    mode = st.session_state.get("last_learn_mode", "Topic")
+    _display_learn_result(result, depth=depth, mode=mode, stream=False)
+
+
+def _display_learn_result(result: dict, *, depth: str, mode: str,
+                          stream: bool = False) -> None:
+    """Display a Learn workflow result with optional UI-only streaming replay."""
     error = result.get("error")
     if error:
         st.error(error)
         return
     guide = result.get("study_guide")
     if guide:
-        depth = st.session_state.get("last_learn_depth", "Summary")
-        mode = st.session_state.get("last_learn_mode", "Topic")
-        _display_study_guide(guide, depth=depth, mode=mode)
+        _display_study_guide(guide, depth=depth, mode=mode, stream=stream)
     _display_memory_section(result)
     _display_debug_trace(result, "Learn Workflow Trace")
+
+
+def _has_cache_hit(result: dict) -> bool:
+    """Return whether a Learn result came from the cache."""
+    trace = result.get("trace", [])
+    return any("cache hit" in str(step).lower() for step in trace)
+
+
+def _should_stream_learn_result(result: dict) -> bool:
+    """Only fresh successful Learn generations should be streamed."""
+    if not result:
+        return False
+    if result.get("error") or result.get("generation_failed"):
+        return False
+    if not result.get("study_guide"):
+        return False
+    return not _has_cache_hit(result)
+
+
+def _iter_markdown_blocks(text: str) -> Iterator[str]:
+    """Yield Markdown in paragraph-safe blocks while keeping fenced code intact."""
+    if not text:
+        return
+
+    lines = text.splitlines(keepends=True)
+    block: list[str] = []
+    in_code_fence = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+            block.append(line)
+            if not in_code_fence:
+                yield "".join(block)
+                block = []
+            continue
+
+        block.append(line)
+        if in_code_fence:
+            continue
+
+        if stripped == "":
+            if any(part.strip() for part in block):
+                yield "".join(block)
+            block = []
+
+    if block and any(part.strip() for part in block):
+        yield "".join(block)
+
+
+def _stream_markdown(text: str, *, unsafe_allow_html: bool = False) -> None:
+    """Replay final Markdown incrementally in the UI without changing the result."""
+    if not text:
+        return
+
+    placeholder = st.empty()
+    rendered = ""
+    for chunk in _iter_markdown_blocks(text):
+        rendered += chunk
+        placeholder.markdown(rendered, unsafe_allow_html=unsafe_allow_html)
+
+    placeholder.markdown(text, unsafe_allow_html=unsafe_allow_html)
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +138,7 @@ def _show_cached_learn_result() -> None:
 # ---------------------------------------------------------------------------
 
 def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
-                         mode: str = "Topic") -> None:
+                         mode: str = "Topic", stream: bool = False) -> None:
     """Render a structured Learn Path in the Streamlit UI."""
     if mode == "Learn Path":
         level_label = guide.difficulty.value.capitalize()
@@ -80,7 +150,10 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
         st.caption("Topic Mode · Deep Study")
 
     st.markdown("#### Overview")
-    st.markdown(guide.summary)
+    if stream:
+        _stream_markdown(guide.summary)
+    else:
+        st.markdown(guide.summary)
 
     # --- Table of Contents for Topic mode ---
     if mode == "Topic" and guide.detailed_notes:
@@ -149,7 +222,10 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
         notes = downgrade_headings(notes)
         # Learn Path Deep Study injects HTML <a id="..."> anchors for topic links
         _has_html = '<a id="' in notes
-        st.markdown(notes, unsafe_allow_html=_has_html)
+        if stream:
+            _stream_markdown(notes, unsafe_allow_html=_has_html)
+        else:
+            st.markdown(notes, unsafe_allow_html=_has_html)
 
     st.markdown("---")
     _display_sources_section(guide)
@@ -331,6 +407,7 @@ def render_learn() -> None:
         "or when you want a fresh answer."
     )
     generate = st.button(btn_label, key="btn_learn")
+    displayed_result_this_run = False
 
     if generate:
         if learning_mode != "Learn Path":
@@ -360,9 +437,14 @@ def render_learn() -> None:
         st.session_state["last_learn_trace"] = result.get("trace", [])
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
         _accumulate_usage_records(result.get("usage_records", []))
-
-        # Rerun so the sidebar token counter refreshes immediately
-        st.rerun()
+        if _should_stream_learn_result(result):
+            _display_learn_result(
+                result,
+                depth=depth_label,
+                mode=learning_mode,
+                stream=True,
+            )
+            displayed_result_this_run = True
 
     # Display generation failure warning if applicable
     result = st.session_state.get("last_learn_result")
@@ -376,19 +458,12 @@ def render_learn() -> None:
 
     # Show cache-hit indicator when result came from cache (zero-cost reuse)
     if result and not result.get("generation_failed"):
-        trace = result.get("trace", [])
-        if any("cache hit" in str(t) for t in trace):
+        if _has_cache_hit(result):
             st.caption("Cached result — no additional tokens used. Cache persists across app restarts.")
 
-    # Display cached result (shown after rerun or on revisit)
-    # NOTE: Streaming evaluation — true token-by-token streaming is not
-    # safe to implement here.  Generation is atomic inside LangGraph nodes
-    # with caching, token accounting, retry logic, and trace collection.
-    # Streaming would require splitting the node into a streaming generator
-    # + post-processing pipeline, breaking the atomic cache-or-generate
-    # pattern.  Safest future path: cache the full result first, then
-    # replay it incrementally at the Streamlit UI layer for visual effect.
-    if result:
+    # Stream only fresh successful generations in the current run.
+    # Cached results and revisits stay instant and render from session state.
+    if result and not displayed_result_this_run:
         _show_cached_learn_result()
 
     _display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))
