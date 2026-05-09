@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "topic": "LLM Basics and Prompt Engineering",
+      "difficulty": "beginner",
+      "faithfulness": 0.9167,
+      "answer_relevancy": 0.5894,
+      "context_precision": 0.7117,
+      "context_recall": 1.0,
+      "answer_correctness": 0.1555,
+      "num_contexts": 16,
+      "answer_length": 15752,
+      "error": null
+    },
+    {
+      "topic": "RAG and Vector Databases",
+      "difficulty": "intermediate",
+      "faithfulness": 0.8889,
+      "answer_relevancy": 0.7372,
+      "context_precision": 0.7497,
+      "context_recall": 1.0,
+      "answer_correctness": 0.6208,
+      "num_contexts": 16,
+      "answer_length": 18114,
+      "error": null
+    },
+    {
+      "topic": "AI Agents and Tool Calling",
+      "difficulty": "intermediate",
+      "faithfulness": 0.8235,
+      "answer_relevancy": 0.69,
+      "context_precision": 0.633,
+      "context_recall": 1.0,
+      "answer_correctness": 0.7163,
+      "num_contexts": 16,
+      "answer_length": 17105,
+      "error": null
+    }
+  ],
+  "avg_faithfulness": 0.8764,
+  "avg_answer_relevancy": 0.6722,
+  "avg_context_precision": 0.6981,
+  "avg_context_recall": 1.0,
+  "avg_answer_correctness": 0.4975,
+  "timestamp": "2026-05-09T01:20:05.356859+00:00",
+  "model": "gpt-4o-mini",
+  "case_count": 3
+}
