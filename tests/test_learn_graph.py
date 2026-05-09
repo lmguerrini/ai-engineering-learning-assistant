@@ -10,6 +10,7 @@ from src.graphs.learn_nodes import (
     _MIN_SOURCES,
     _TOPIC_DEEP_STUDY_BUNDLES,
     _build_fallback_guide,
+    _build_learn_cache_key,
     _build_memory_context,
     _build_sources_list,
     _extract_summary_from_markdown,
@@ -375,6 +376,18 @@ class TestLearnWorkflowRouting:
         assert guide is not None
         assert len(guide.sources) > 0
 
+    @patch("src.graphs.learn_graph.compile_learn_graph")
+    def test_passes_progressive_streaming_flag_to_initial_state(self, mock_compile):
+        """run_learn_workflow should pass the UI toggle into the graph state."""
+        mock_app = MagicMock()
+        mock_app.invoke.return_value = {"retrieved_docs": [], "source_quality_ok": True}
+        mock_compile.return_value = mock_app
+
+        run_learn_workflow("AI Agents", progressive_streaming=False)
+
+        initial_state = mock_app.invoke.call_args.args[0]
+        assert initial_state["progressive_streaming"] is False
+
 
 class TestBuildFallbackGuide:
     def test_builds_from_docs(self):
@@ -441,6 +454,26 @@ class TestBuildSourcesList:
         state = _base_state(retrieved_docs=docs)
         sources = _build_sources_list(state)
         assert len(sources) == 5
+
+
+class TestLearnCacheKey:
+    def test_deep_study_mode_changes_cache_key(self):
+        progressive_key = _build_learn_cache_key(
+            _base_state(progressive_streaming=True)
+        )
+        standard_key = _build_learn_cache_key(
+            _base_state(progressive_streaming=False)
+        )
+        assert progressive_key != standard_key
+
+    def test_summary_mode_ignores_progressive_streaming_toggle(self):
+        progressive_key = _build_learn_cache_key(
+            _base_state(style=ResponseStyle.CONCISE, progressive_streaming=True)
+        )
+        standard_key = _build_learn_cache_key(
+            _base_state(style=ResponseStyle.CONCISE, progressive_streaming=False)
+        )
+        assert progressive_key == standard_key
 
 
 @patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
@@ -529,6 +562,46 @@ class TestDeepStudyLearnPathFlow:
         assert isinstance(guide, StudyGuide)
         assert any("error" in t.lower() for t in result["trace"])
 
+    @patch("src.graphs.learn_nodes.get_settings")
+    def test_uses_single_pass_generation_when_progressive_streaming_disabled(
+        self, mock_settings, _cache_set, _cache_get
+    ):
+        """Deep Study Learn Path should use one cheaper markdown call when disabled."""
+        mock_settings.return_value = MagicMock(
+            openai_api_key="sk-test",
+            app_default_model="gpt-4o-mini",
+        )
+        handbook_md = (
+            "# Professional Curriculum Handbook\n\n"
+            "This handbook covers LangChain and RAG topics in depth.\n\n"
+            "## 1. LangChain Chains\n\n### Theory & Context\nLangChain provides...\n"
+        )
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = _make_llm_response(
+            handbook_md,
+            total_tokens=2500,
+        )
+        progress_updates: list[StudyGuide] = []
+        state = _base_state(
+            topic=_LEARN_PATH_TOPIC,
+            style=ResponseStyle.DETAILED,
+            retrieved_docs=_make_docs(3),
+            progress_callback=progress_updates.append,
+            progressive_streaming=False,
+        )
+
+        with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
+            result = generate_study_guide(state)
+
+        guide = result["study_guide"]
+        assert isinstance(guide, StudyGuide)
+        assert guide.summary.startswith("This handbook covers")
+        assert "## 1. LangChain Chains" in guide.detailed_notes
+        assert progress_updates == []
+        assert len(result["usage_records"]) == 1
+        assert any("single-pass generation" in t for t in result["trace"])
+        assert not any("progress emitted" in t for t in result["trace"])
+
 
 @patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
 @patch("src.graphs.learn_nodes.set_cached_value")
@@ -592,3 +665,44 @@ class TestDeepStudyTopicFlow:
         assert progress_updates[0].detailed_notes == ""
         assert progress_updates[-1].detailed_notes == guide.detailed_notes
         assert any("section bundle 1" in t for t in result["trace"])
+
+    @patch("src.graphs.learn_nodes.get_settings")
+    def test_uses_single_pass_generation_when_progressive_streaming_disabled(
+        self, mock_settings, _cache_set, _cache_get
+    ):
+        """Deep Study Topic should use one cheaper markdown call when disabled."""
+        mock_settings.return_value = MagicMock(
+            openai_api_key="sk-test",
+            app_default_model="gpt-4o-mini",
+        )
+        handbook_md = (
+            "# AI Agents\n\n"
+            "AI agents coordinate planning, tools, and decision making.\n\n"
+            "## Conceptual Foundations\nAgents act toward goals.\n"
+        )
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = _make_llm_response(
+            handbook_md,
+            total_tokens=1800,
+        )
+        progress_updates: list[StudyGuide] = []
+        state = _base_state(
+            topic="AI Agents",
+            style=ResponseStyle.DETAILED,
+            retrieved_docs=_make_docs(3),
+            progress_callback=progress_updates.append,
+            progressive_streaming=False,
+        )
+
+        with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
+            result = generate_study_guide(state)
+
+        guide = result["study_guide"]
+        assert isinstance(guide, StudyGuide)
+        assert guide.summary.startswith("AI agents coordinate")
+        assert guide.key_concepts == ["AI Agents"]
+        assert "## Conceptual Foundations" in guide.detailed_notes
+        assert progress_updates == []
+        assert len(result["usage_records"]) == 1
+        assert any("single-pass generation" in t for t in result["trace"])
+        assert not any("progress emitted" in t for t in result["trace"])

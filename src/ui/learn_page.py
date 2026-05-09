@@ -92,6 +92,11 @@ def _should_stream_learn_result(result: dict) -> bool:
     return not _has_cache_hit(result)
 
 
+def _supports_progressive_streaming(*, depth: str, mode: str) -> bool:
+    """Return whether the current Learn mode can use progressive streaming."""
+    return mode == "Topic" or depth == "Deep Study"
+
+
 def _iter_markdown_blocks(text: str) -> Iterator[str]:
     """Yield Markdown in paragraph-safe blocks while keeping fenced code intact."""
     if not text:
@@ -479,13 +484,28 @@ def render_learn() -> None:
         value=False,
         key="force_regenerate",
     )
+    progressive_streaming_requested = st.checkbox(
+        "Progressive streaming",
+        value=False,
+        key="progressive_streaming",
+        disabled=not _supports_progressive_streaming(depth=depth_label, mode=learning_mode),
+    )
     st.caption(
         "Cached results save tokens. Enable regeneration when testing "
         "or when you want a fresh answer."
     )
+    st.caption(
+        "Progressive streaming starts showing content earlier by generating "
+        "the guide section-by-section, but this can use more LLM calls/tokens "
+        "than standard generation."
+    )
     generate = st.button(btn_label, key="btn_learn")
     displayed_result_this_run = False
-    progressive_result_slot = st.empty() if generate else None
+    use_progressive_streaming = (
+        progressive_streaming_requested
+        and _supports_progressive_streaming(depth=depth_label, mode=learning_mode)
+    )
+    progressive_result_slot = st.empty() if generate and use_progressive_streaming else None
     progressive_render_state = {"last_guide": None}
 
     if generate:
@@ -518,7 +538,8 @@ def render_learn() -> None:
                 difficulty=difficulty,
                 style=style,
                 force_regenerate=force_regenerate,
-                progress_callback=_progress_callback,
+                progressive_streaming=use_progressive_streaming,
+                progress_callback=_progress_callback if use_progressive_streaming else None,
             )
 
         st.session_state["last_learn_result"] = result
@@ -532,7 +553,7 @@ def render_learn() -> None:
         st.session_state["last_learn_trace"] = result.get("trace", [])
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
         _accumulate_usage_records(result.get("usage_records", []))
-        if _should_stream_learn_result(result):
+        if use_progressive_streaming and _should_stream_learn_result(result):
             guide = result.get("study_guide")
             if guide and progressive_result_slot is not None:
                 with progressive_result_slot.container():

@@ -17,6 +17,7 @@ class LearningState(TypedDict, total=False):
     difficulty: DifficultyLevel
     style: ResponseStyle
     force_regenerate: bool
+    progressive_streaming: bool
 
     # --- Memory ---
     user_memory: dict[str, Any]

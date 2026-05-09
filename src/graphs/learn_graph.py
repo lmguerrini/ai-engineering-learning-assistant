@@ -88,6 +88,7 @@ def run_learn_workflow(
     difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE,
     style: ResponseStyle = ResponseStyle.DETAILED,
     force_regenerate: bool = False,
+    progressive_streaming: bool = True,
     progress_callback: Callable[[StudyGuide], None] | None = None,
 ) -> LearningState:
     """Run the full Learn workflow and return the final state.
@@ -103,6 +104,7 @@ def run_learn_workflow(
             "difficulty": difficulty,
             "style": style,
             "force_regenerate": force_regenerate,
+            "progressive_streaming": progressive_streaming,
             "trace": [],
             "token_usage": {},
         }

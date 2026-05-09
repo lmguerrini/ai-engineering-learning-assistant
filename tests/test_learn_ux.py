@@ -597,6 +597,17 @@ class TestLearnSubtitle:
 class TestLearnStreamingHelpers:
     """Learn streaming should stay UI-only and preserve safe boundaries."""
 
+    def test_supports_progressive_streaming_for_deep_study_modes(self):
+        from src.ui.learn_page import _supports_progressive_streaming
+
+        assert _supports_progressive_streaming(depth="Deep Study", mode="Topic") is True
+        assert _supports_progressive_streaming(depth="Deep Study", mode="Learn Path") is True
+
+    def test_disables_progressive_streaming_for_summary_learn_paths(self):
+        from src.ui.learn_page import _supports_progressive_streaming
+
+        assert _supports_progressive_streaming(depth="Summary", mode="Learn Path") is False
+
     def test_should_stream_fresh_result(self):
         from src.ui.learn_page import _should_stream_learn_result
 
@@ -785,6 +796,26 @@ class TestLearnStreamingHelpers:
         )
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
+
+
+class TestLearnProgressiveStreamingToggle:
+    """Learn page should expose a clear progressive streaming toggle."""
+
+    def test_learn_page_includes_progressive_streaming_toggle_label(self):
+        with open("src/ui/learn_page.py") as f:
+            source = f.read()
+        assert '"Progressive streaming"' in source
+
+    def test_learn_page_includes_progressive_streaming_explanation(self):
+        with open("src/ui/learn_page.py") as f:
+            source = f.read()
+        assert "starts showing content earlier" in source
+        assert "section-by-section" in source
+
+    def test_learn_page_passes_progressive_streaming_to_workflow(self):
+        with open("src/ui/learn_page.py") as f:
+            source = f.read()
+        assert "progressive_streaming=use_progressive_streaming" in source
 
 
 class TestQuizUiCopy:

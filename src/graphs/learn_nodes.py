@@ -367,10 +367,16 @@ def _build_fallback_guide(state: LearningState) -> StudyGuide:
 def _build_learn_cache_key(state: LearningState) -> str:
     """Build a cache key for the study guide based on inputs + memory hash."""
     profile = state.get("memory_profile", {})
+    generation_mode = "standard"
+    if state.get("progressive_streaming", True) and (
+        is_deep_study_learn_path(state) or is_deep_study_topic(state)
+    ):
+        generation_mode = "progressive"
     payload = {
         "topic": state.get("topic", ""),
         "difficulty": str(state.get("difficulty", "")),
         "style": str(state.get("style", "")),
+        "generation_mode": generation_mode,
         "memory_hash": str(sorted(profile.items())) if profile else "",
         "prompt_version": _PROMPT_VERSION,
     }
@@ -531,6 +537,11 @@ def _coerce_key_concepts(value: Any, fallback: list[str]) -> list[str]:
     return items or fallback
 
 
+def _is_progressive_streaming_enabled(state: LearningState) -> bool:
+    """Return whether Deep Study should use the progressive multi-call path."""
+    return bool(state.get("progressive_streaming", True))
+
+
 def _generate_deep_study_learn_path(state: LearningState) -> dict:
     """Dedicated generation flow for Deep Study + Learn Path.
 
@@ -575,6 +586,41 @@ def _generate_deep_study_learn_path(state: LearningState) -> dict:
         level_label = difficulty.value.capitalize()
         key_concepts = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
         sources = _build_sources_list(state)
+
+        if not _is_progressive_streaming_enabled(state):
+            trace.append("generate_study_guide: progressive streaming disabled — using single-pass generation")
+            raw = _call_llm_text(
+                client,
+                model=model,
+                prompt=prompt,
+                max_tokens=16384,
+                temperature=0.3,
+                trace=trace,
+                trace_label="generate_study_guide: single-pass deep study",
+                token_usage=token_usage,
+                usage_records=usage_records,
+                usage_operation="learn_guide_generation",
+            )
+            guide = StudyGuide(
+                topic=curriculum_title,
+                difficulty=difficulty,
+                summary=_extract_summary_from_markdown(raw),
+                key_concepts=key_concepts,
+                detailed_notes=raw.strip(),
+                sources=sources,
+            )
+            trace.append("generate_study_guide: StudyGuide built from markdown")
+            try:
+                set_cached_value(cache_key, guide.model_dump(), ttl_seconds=3600)
+                trace.append("generate_study_guide: cached")
+            except Exception:
+                pass
+            return {
+                "study_guide": guide,
+                "trace": trace,
+                "token_usage": token_usage,
+                "usage_records": usage_records,
+            }
 
         summary_raw = _call_llm_text(
             client,
@@ -711,6 +757,42 @@ def _generate_deep_study_topic(state: LearningState) -> dict:
         topic = state.get("topic", "Deep Study")
         difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
         sources = _build_sources_list(state)
+
+        if not _is_progressive_streaming_enabled(state):
+            trace.append("generate_study_guide: progressive streaming disabled — using single-pass generation")
+            raw = _call_llm_text(
+                client,
+                model=model,
+                prompt=prompt,
+                max_tokens=16384,
+                temperature=0.3,
+                trace=trace,
+                trace_label="generate_study_guide: single-pass deep study",
+                token_usage=token_usage,
+                usage_records=usage_records,
+                usage_operation="learn_guide_generation",
+            )
+            guide = StudyGuide(
+                topic=topic,
+                difficulty=difficulty,
+                summary=_extract_summary_from_markdown(raw),
+                key_concepts=[topic],
+                detailed_notes=raw.strip(),
+                sources=sources,
+            )
+            trace.append("generate_study_guide: StudyGuide built from markdown")
+            try:
+                set_cached_value(cache_key, guide.model_dump(), ttl_seconds=3600)
+                trace.append("generate_study_guide: cached")
+            except Exception:
+                pass
+            return {
+                "study_guide": guide,
+                "trace": trace,
+                "token_usage": token_usage,
+                "usage_records": usage_records,
+            }
+
         summary_raw = _call_llm_text(
             client,
             model=model,
