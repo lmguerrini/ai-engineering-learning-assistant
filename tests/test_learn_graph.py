@@ -8,6 +8,7 @@ from src.graphs.learn_graph import build_learn_graph, compile_learn_graph, run_l
 from src.graphs.learn_nodes import (
     _MIN_CONTENT_CHARS,
     _MIN_SOURCES,
+    _TOPIC_DEEP_STUDY_BUNDLES,
     _build_fallback_guide,
     _build_memory_context,
     _build_sources_list,
@@ -55,6 +56,24 @@ def _base_state(**overrides) -> LearningState:
     }
     state.update(overrides)
     return state
+
+
+def _make_llm_response(
+    text: str,
+    *,
+    prompt_tokens: int = 100,
+    completion_tokens: int = 50,
+    total_tokens: int = 150,
+) -> MagicMock:
+    """Create a mock OpenAI chat completion response."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content=text))]
+    mock_response.usage = MagicMock(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+    return mock_response
 
 
 # ---------------------------------------------------------------------------
@@ -203,15 +222,18 @@ class TestGenerateStudyGuide:
             "detailed_notes": "Agents are autonomous systems.",
             "sources": [{"title": "Doc 1", "content_snippet": "...", "relevance_score": 0.9}],
         })
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content=guide_json))]
-        mock_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+        mock_response = _make_llm_response(guide_json)
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
 
         with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
-            result = generate_study_guide(_base_state(retrieved_docs=_make_docs(2)))
+            result = generate_study_guide(
+                _base_state(
+                    retrieved_docs=_make_docs(2),
+                    style=ResponseStyle.CONCISE,
+                )
+            )
 
         guide = result["study_guide"]
         assert isinstance(guide, StudyGuide)
@@ -426,27 +448,51 @@ class TestBuildSourcesList:
 class TestDeepStudyLearnPathFlow:
     @patch("src.graphs.learn_nodes.get_settings")
     def test_returns_markdown_guide(self, mock_settings, _cache_set, _cache_get):
-        """Deep Study Learn Path returns a StudyGuide built from raw markdown."""
+        """Deep Study Learn Path returns a StudyGuide built from progressive sections."""
+        import json
+
         mock_settings.return_value = MagicMock(
             openai_api_key="sk-test",
             app_default_model="gpt-4o-mini",
         )
-        handbook_md = (
-            "# Professional Curriculum Handbook\n\n"
-            "This handbook covers LangChain and RAG topics in depth.\n\n"
-            "## LangChain Chains\n\n### Theory\nLangChain provides...\n"
+        summary_json = json.dumps({
+            "summary": "This curriculum builds practical fluency in LangChain, RAG, and Streamlit.",
+            "key_concepts": [],
+        })
+        topic_names = [
+            "LangChain Chains",
+            "Retrieval-Augmented Generation",
+            "Function Calling",
+            "Tool Integration",
+            "Streamlit UI",
+            "Evaluation",
+        ]
+        responses = [_make_llm_response(summary_json, total_tokens=200)]
+        responses.extend(
+            _make_llm_response(
+                (
+                    f"## {i}. {name}\n\n"
+                    f"### Theory & Context\n{name} theory.\n\n"
+                    f"### Architecture / Internal Design\n{name} architecture.\n\n"
+                    f"### Implementation Details\n{name} implementation.\n\n"
+                    f"### Practical Examples\n{name} example.\n\n"
+                    f"### Common Mistakes & Anti-Patterns\n{name} pitfalls.\n\n"
+                    f"### Review Checklist\n- Check 1\n- Check 2"
+                ),
+                total_tokens=300,
+            )
+            for i, name in enumerate(topic_names, 1)
         )
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content=handbook_md))]
-        mock_response.usage = MagicMock(prompt_tokens=500, completion_tokens=2000, total_tokens=2500)
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_client.chat.completions.create.side_effect = responses
+        progress_updates: list[StudyGuide] = []
 
         state = _base_state(
             topic=_LEARN_PATH_TOPIC,
             style=ResponseStyle.DETAILED,
             retrieved_docs=_make_docs(3),
+            progress_callback=progress_updates.append,
         )
 
         with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
@@ -454,16 +500,15 @@ class TestDeepStudyLearnPathFlow:
 
         guide = result["study_guide"]
         assert isinstance(guide, StudyGuide)
-        # Should contain raw markdown in detailed_notes, NOT parsed JSON
-        assert "LangChain" in guide.detailed_notes
-        assert "handbook" in guide.detailed_notes.lower() or "chains" in guide.detailed_notes.lower()
-        # key_concepts extracted from topic string
+        assert "LangChain Chains" in guide.detailed_notes
+        assert guide.summary.startswith("This curriculum builds")
         assert len(guide.key_concepts) > 0
-        # Sources built from retrieved docs
         assert len(guide.sources) > 0
-        # Trace shows markdown flow
+        assert len(progress_updates) == 1 + len(topic_names)
+        assert progress_updates[0].detailed_notes == ""
+        assert "## 1. LangChain Chains" in progress_updates[-1].detailed_notes
         assert any("deep_study_learn_path" in t for t in result["trace"])
-        assert any("markdown" in t.lower() for t in result["trace"])
+        assert any("progress emitted" in t for t in result["trace"])
 
     @patch("src.graphs.learn_nodes.get_settings")
     def test_fallback_on_error(self, mock_settings, _cache_set, _cache_get):
@@ -483,3 +528,67 @@ class TestDeepStudyLearnPathFlow:
         guide = result["study_guide"]
         assert isinstance(guide, StudyGuide)
         assert any("error" in t.lower() for t in result["trace"])
+
+
+@patch("src.graphs.learn_nodes.get_cached_value", return_value=None)
+@patch("src.graphs.learn_nodes.set_cached_value")
+class TestDeepStudyTopicFlow:
+    @patch("src.graphs.learn_nodes.get_settings")
+    def test_emits_progressive_section_updates(self, mock_settings, _cache_set, _cache_get):
+        """Deep Study Topic emits staged progress updates before the final guide."""
+        import json
+
+        mock_settings.return_value = MagicMock(
+            openai_api_key="sk-test",
+            app_default_model="gpt-4o-mini",
+        )
+        summary_json = json.dumps({
+            "summary": "AI agents coordinate planning, tools, and decision making.",
+            "key_concepts": [
+                "Autonomy: Agents choose actions based on goals.",
+                "Planning: Agents decompose work into steps.",
+            ],
+        })
+        bundle_markdown = [
+            (
+                "## Conceptual Foundations\nAgents act toward goals.\n\n"
+                "## Architecture / Internal Design\nPlanner, memory, tools.\n\n"
+                "## Implementation Details\n```python\nclass Agent:\n    pass\n```"
+            ),
+            (
+                "## Practical Examples\nExample workflow.\n\n"
+                "## Production Considerations\nMonitoring and retries.\n\n"
+                "## Common Mistakes & Anti-Patterns\nOver-coupled tool logic."
+            ),
+            (
+                "## When to Use / When Not to Use\nUse for multi-step tasks.\n\n"
+                "## Comparison Table\n| Approach | Fit |\n|---|---|\n| Agent | High |\n\n"
+                "## Review Checklist\n- Goal clarity\n- Tool safety"
+            ),
+        ]
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [
+            _make_llm_response(summary_json, total_tokens=180),
+            *[_make_llm_response(text, total_tokens=320) for text in bundle_markdown],
+        ]
+        progress_updates: list[StudyGuide] = []
+
+        state = _base_state(
+            topic="AI Agents",
+            style=ResponseStyle.DETAILED,
+            retrieved_docs=_make_docs(3),
+            progress_callback=progress_updates.append,
+        )
+
+        with patch("src.graphs.learn_nodes.OpenAI", return_value=mock_client):
+            result = generate_study_guide(state)
+
+        guide = result["study_guide"]
+        assert isinstance(guide, StudyGuide)
+        assert guide.summary.startswith("AI agents coordinate")
+        assert "## Conceptual Foundations" in guide.detailed_notes
+        assert "## Review Checklist" in guide.detailed_notes
+        assert len(progress_updates) == 1 + len(_TOPIC_DEEP_STUDY_BUNDLES)
+        assert progress_updates[0].detailed_notes == ""
+        assert progress_updates[-1].detailed_notes == guide.detailed_notes
+        assert any("section bundle 1" in t for t in result["trace"])
