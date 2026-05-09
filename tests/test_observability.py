@@ -41,7 +41,7 @@ class TestTracingStatus:
         )
         result = format_tracing_status(status)
         assert result["tracing_enabled"] is False
-        assert result["status_label"] == "❌ Disabled"
+        assert result["status_label"] == "Disabled"
         assert result["project"] == "test-proj"
         assert result["endpoint"] == "https://api.smith.langchain.com"
         assert "Not enabled." in result["issues"]
@@ -53,7 +53,7 @@ class TestTracingStatus:
         )
         result = format_tracing_status(status)
         assert result["tracing_enabled"] is True
-        assert result["status_label"] == "✅ Active"
+        assert result["status_label"] == "Active"
         assert result["endpoint"] == "https://custom.endpoint.com"
 
     def test_format_includes_endpoint_key(self):

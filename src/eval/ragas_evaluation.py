@@ -81,7 +81,7 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
     ),
     RAGAsEvalCase(
         topic="AI Agents and Tool Calling",
-        difficulty="intermediate",
+        difficulty="advanced",
         # Narrowed question to focus on tool calling mechanics — the previous
         # version asked broadly about "ReAct pattern for autonomous task
         # execution" which lowered context precision because the retriever

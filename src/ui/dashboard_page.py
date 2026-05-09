@@ -29,6 +29,103 @@ def _get_session_usage_summary() -> dict | None:
     return aggregate_usage(records)
 
 
+def _has_cache_hit(result: dict) -> bool:
+    """Return whether a stored workflow result came from cache."""
+    trace = result.get("trace", [])
+    return any("cache hit" in str(step).lower() for step in trace)
+
+
+def _estimate_result_cost_usd(result: dict) -> float:
+    """Return the estimated USD cost for one stored workflow result."""
+    records = result.get("usage_records", []) or []
+    return round(sum(float(rec.get("estimated_cost_usd", 0.0) or 0.0) for rec in records), 6)
+
+
+def _operation_category(operation: str) -> str:
+    """Map a low-level usage operation to a reviewer-friendly category."""
+    if operation.startswith("learn_"):
+        return "Learn"
+    if operation.startswith("quiz_"):
+        return "Quiz"
+    return "System"
+
+
+def _operation_label(operation: str) -> str:
+    """Humanize a tracked operation name for dashboard display."""
+    return operation.replace("_", " ").strip().title()
+
+
+def _format_bool_label(value: bool) -> str:
+    """Return a compact on/off label for dashboard tables."""
+    return "On" if value else "Off"
+
+
+def _format_ragas_case_label(result) -> str:
+    """Return a reviewer-friendly RAGAs case label."""
+    difficulty = getattr(result, "difficulty", "") or ""
+    difficulty_label = difficulty.capitalize() if difficulty else "Unknown"
+    return f"{result.topic} ({difficulty_label})"
+
+
+def _metric_status_label(field_name: str, value: float | None) -> str:
+    """Return the dashboard status label for one RAGAs metric row."""
+    if field_name == "answer_correctness":
+        return "Diagnostic only"
+    return _metric_color(value)
+
+
+def _display_latest_run_contexts(learn_result: dict, quiz_result: dict) -> None:
+    """Render concise run-level context before the raw operation breakdown."""
+    st.markdown("#### Latest Run Context")
+    st.caption(
+        "Run settings are summarized here. The operation table below shows individual "
+        "LLM calls, which is why progressive Learn runs may appear as multiple rows."
+    )
+
+    learn_col, quiz_col = st.columns(2)
+    with learn_col:
+        st.markdown("##### Learn")
+        if learn_result:
+            learning_mode = st.session_state.get("last_learn_mode", "—")
+            learning_depth = st.session_state.get("last_learn_depth", "—")
+            progressive = st.session_state.get("last_learn_progressive_streaming", False)
+            regenerate = st.session_state.get("last_learn_force_regenerate", False)
+            tokens = learn_result.get("token_usage", {})
+            st.markdown(
+                f"| Field | Value |\n"
+                f"|---|---|\n"
+                f"| Learning Mode | {learning_mode} |\n"
+                f"| Learning Depth | {learning_depth} |\n"
+                f"| Progressive Streaming | {_format_bool_label(progressive)} |\n"
+                f"| Cache Bypass | {_format_bool_label(regenerate)} |\n"
+                f"| Cache Hit | {_format_bool_label(_has_cache_hit(learn_result))} |\n"
+                f"| Tokens | {tokens.get('total_tokens', 0):,} |\n"
+                f"| Estimated Cost | ${_estimate_result_cost_usd(learn_result):.6f} |"
+            )
+        else:
+            st.info(
+                "No Learn run captured yet. Generate a Learn topic or Learn Path to populate run context."
+            )
+
+    with quiz_col:
+        st.markdown("##### Quiz")
+        if quiz_result:
+            tokens = quiz_result.get("token_usage", {})
+            topic = quiz_result.get("topic") or st.session_state.get("quiz_selected_topic", "—")
+            st.markdown(
+                f"| Field | Value |\n"
+                f"|---|---|\n"
+                f"| Topic | {topic} |\n"
+                f"| Cache Hit | {_format_bool_label(_has_cache_hit(quiz_result))} |\n"
+                f"| Tokens | {tokens.get('total_tokens', 0):,} |\n"
+                f"| Estimated Cost | ${_estimate_result_cost_usd(quiz_result):.6f} |"
+            )
+        else:
+            st.info(
+                "No Quiz run captured yet. Generate and evaluate a quiz to populate run context."
+            )
+
+
 def _display_session_cost_summary() -> None:
     """Display aggregated token/cost data for the current session."""
     records = st.session_state.get("session_usage_records", [])
@@ -39,19 +136,24 @@ def _display_session_cost_summary() -> None:
             "token and cost tracking."
         )
         return
+
     rows = "".join(
-        f"| {op['operation']} | {op['total_tokens']:,} | ${op['estimated_cost_usd']:.6f} |\n"
-        for op in summary["operations"]
+        f"| {_operation_category(rec.get('operation', 'unknown'))} | "
+        f"{rec.get('model', 'Unknown')} | "
+        f"{_operation_label(rec.get('operation', 'unknown'))} | "
+        f"{rec.get('total_tokens', 0):,} | "
+        f"${float(rec.get('estimated_cost_usd', 0.0) or 0.0):.6f} |\n"
+        for rec in records
     )
     st.caption(
         "Session-level token and cost estimates are aggregated across Learn and Quiz "
-        "runs in this app session."
+        "runs in this app session. Cache hits typically reuse prior outputs and add no new token usage."
     )
     st.markdown(
-        f"| Operation | Tokens | Est. Cost |\n"
-        f"|---|---|---|\n"
+        f"| Run Type | Model | Operation | Tokens | Est. Cost |\n"
+        f"|---|---|---|---|---|\n"
         f"{rows}"
-        f"| **Total** | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
+        f"| **Total** |  |  | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
     )
 
     with st.expander("Raw details"):
@@ -171,12 +273,12 @@ def _render_ragas_section() -> None:
 
     st.info(
         "💡 Results below are from the **latest saved benchmark**. "
-        "Click the button to run a fresh evaluation (costs money and takes 1–3 min)."
+        "Click the button to run a fresh evaluation (costs money and takes 5–10 min)."
     )
     st.warning(
         "⚠️ Running RAGAs evaluation calls the OpenAI API (LLM judge) for each "
         "case and metric. The default 3 cases typically cost ~$0.01–0.03 and "
-        "take 1–3 minutes. Do not run repeatedly without reason.",
+        "take 5–10 minutes. Do not run repeatedly without reason.",
         icon="💰",
     )
 
@@ -243,18 +345,22 @@ def _display_ragas_report(report) -> None:
 
     # ── Diagnostic metric ────────────────────────────────────────────
     st.markdown("#### Diagnostic Metric")
-    diag_col, _ = st.columns([1, 3])
+    diag_col, diag_note_col = st.columns([1, 3])
     diag_col.metric(
         label="Answer Correctness",
         value=_fmt_metric(report.avg_answer_correctness),
-        help="Diagnostic only — not used for pass/fail",
+        help="Diagnostic only — not used for pass/fail or primary Learn quality decisions.",
+    )
+    diag_note_col.info(
+        "Low Answer Correctness usually reflects mismatch between a long generated study guide "
+        "and a short reference answer, not poor grounded Learn quality."
     )
     st.caption(ANSWER_CORRECTNESS_NOTE)
 
     # ── Per-case breakdown ───────────────────────────────────────────
     st.markdown("#### Per-Case Breakdown")
     for r in report.results:
-        label = f"{r.topic} ({r.difficulty})"
+        label = _format_ragas_case_label(r)
         if r.error:
             st.error(f"**{label}** — Error: {r.error}")
             continue
@@ -273,9 +379,15 @@ def _display_ragas_report(report) -> None:
                 ("Answer Correctness", "answer_correctness", r.answer_correctness),
             ]:
                 role = "Primary" if field_name in PRIMARY_METRICS else "Diagnostic"
-                rows += f"| {name} | {_fmt_metric(val)} | {_metric_color(val)} | {role} |\n"
+                rows += (
+                    f"| {name} | {_fmt_metric(val)} | "
+                    f"{_metric_status_label(field_name, val)} | {role} |\n"
+                )
             st.markdown(header + rows)
-            st.caption(f"Contexts: {r.num_contexts} · Answer length: {r.answer_length:,} chars")
+            st.caption(
+                f"Contexts: {r.num_contexts} · Answer length: {r.answer_length:,} chars · "
+                f"Answer Correctness is diagnostic only."
+            )
 
     # ── Raw report ───────────────────────────────────────────────────
     with st.expander("Raw RAGAs Report"):
@@ -415,6 +527,7 @@ def render_advanced() -> None:
 
     # ── Token and Cost Tracking ───────────────────────────────────────────
     st.subheader("Token and Cost Tracking")
+    _display_latest_run_contexts(learn_result, quiz_result)
     _display_session_cost_summary()
 
     # ── Content Quality Evaluation (RAGAs) ─────────────────────────────
@@ -422,7 +535,9 @@ def render_advanced() -> None:
 
     # ── Learning Signals ──────────────────────────────────────────────────
     st.subheader("Learning Signals")
-    st.caption("Memory and feedback summarize how the assistant can personalize future runs.")
+    st.caption(
+        "These signals show whether personalization, saved progress, and reviewer-visible feedback are populated."
+    )
     memory_col, feedback_col = st.columns(2)
     with memory_col:
         st.markdown("#### Memory and Progress")
@@ -441,7 +556,7 @@ def render_advanced() -> None:
             )
         else:
             st.info(
-                "Memory signals will accumulate as you study and save quiz results."
+                "No saved learning memory yet. Save quiz results to populate progress trends, weak areas, and suggested focus."
             )
     with feedback_col:
         st.markdown("#### Feedback Signals")
@@ -458,12 +573,14 @@ def render_advanced() -> None:
                 st.json(fb_summary)
         else:
             st.info(
-                "No feedback captured yet. Submit ratings from Learn or Quiz to populate reviewer-visible signals."
+                "No feedback captured yet. Submit ratings from Learn or Quiz to populate this reviewer-facing feedback summary."
             )
 
     # ── Workflow Readiness ────────────────────────────────────────────────
     st.subheader("Workflow Readiness")
-    st.caption("Latest Learn and Quiz runs stay inspectable here, with raw traces tucked into expanders.")
+    st.caption(
+        "Latest Learn and Quiz runs stay inspectable here. Expand a workflow only when you need detailed state or raw trace entries."
+    )
     learn_col, quiz_col = st.columns(2)
     with learn_col:
         _display_workflow_trace_panel(
@@ -471,7 +588,7 @@ def render_advanced() -> None:
             learn_result,
             trace_key="last_learn_trace",
             tokens_key="last_learn_tokens",
-            empty_message="No Learn trace available yet. Generate a Learn run first.",
+            empty_message="No Learn trace available yet. Generate a Learn topic or Learn Path to populate workflow diagnostics.",
         )
     with quiz_col:
         _display_workflow_trace_panel(
@@ -479,5 +596,5 @@ def render_advanced() -> None:
             quiz_result,
             trace_key="last_quiz_trace",
             tokens_key="last_quiz_tokens",
-            empty_message="No Quiz trace available yet. Generate and evaluate a quiz first.",
+            empty_message="No Quiz trace available yet. Generate and evaluate a quiz to populate workflow diagnostics.",
         )

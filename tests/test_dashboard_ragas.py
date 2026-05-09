@@ -8,6 +8,8 @@ from src.ui.dashboard_page import (
     _check_ragas_available,
     _metric_color,
     _fmt_metric,
+    _format_ragas_case_label,
+    _metric_status_label,
     _ragas_snapshot_value,
 )
 
@@ -117,6 +119,13 @@ class TestDashboardSnapshotHelpers:
     def test_ragas_snapshot_value_not_run_without_report(self):
         assert _ragas_snapshot_value(None) == "Not run"
 
+    def test_metric_status_label_marks_answer_correctness_diagnostic(self):
+        assert _metric_status_label("answer_correctness", 0.1) == "Diagnostic only"
+
+    def test_ragas_case_label_capitalizes_difficulty(self):
+        case = MagicMock(topic="AI Agents and Tool Calling", difficulty="advanced")
+        assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced)"
+
 
 # ---------------------------------------------------------------------------
 # _display_ragas_report (integration-level with mocked st)
@@ -142,7 +151,7 @@ class TestDisplayRagasReport:
                 ),
                 RAGAsCaseResult(
                     topic="AI Agents",
-                    difficulty="intermediate",
+                    difficulty="advanced",
                     faithfulness=None,
                     answer_relevancy=0.70,
                     context_precision=0.54,
@@ -220,6 +229,18 @@ class TestDisplayRagasReport:
         assert has_diagnostic, f"Diagnostic note not found in caption calls: {caption_calls}"
 
     @patch("src.ui.dashboard_page.st")
+    def test_display_treats_answer_correctness_as_diagnostic_only_in_case_table(self, mock_st):
+        from src.ui.dashboard_page import _display_ragas_report
+
+        self._setup_mock_st(mock_st)
+        report = self._make_report()
+        _display_ragas_report(report)
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        table_calls = [text for text in markdown_calls if "| Metric | Score | Status | Role |" in text]
+        assert any("| Answer Correctness |" in text and "Diagnostic only" in text for text in table_calls)
+
+    @patch("src.ui.dashboard_page.st")
     def test_display_shows_error_case(self, mock_st):
         from src.ui.dashboard_page import _display_ragas_report
         from src.eval.ragas_evaluation import RAGAsReport, RAGAsCaseResult
@@ -287,6 +308,8 @@ class TestRenderRagasSection:
             if "cost" in str(call).lower() or "LLM judge" in str(call)
         ]
         assert len(warning_calls) >= 1
+        warning_text = " ".join(str(call) for call in warning_calls)
+        assert "5–10" in warning_text or "5-10" in warning_text
 
     @patch("src.ui.dashboard_page.st")
     def test_loads_cached_results_on_render(self, mock_st):

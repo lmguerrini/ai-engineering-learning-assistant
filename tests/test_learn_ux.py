@@ -1412,3 +1412,18 @@ class TestDashboardStructure:
             source = f.read()
         assert 'top_cols[0].metric(' in source
         assert 'signal_cols[0].metric(' in source
+
+    def test_dashboard_has_latest_run_context_for_cost_tracking(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '"#### Latest Run Context"' in source
+        assert "Learning Mode" in source
+        assert "Progressive Streaming" in source
+        assert "Cache Bypass" in source
+        assert "Cache Hit" in source
+
+    def test_dashboard_uses_clearer_learning_signal_empty_states(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "No saved learning memory yet." in source
+        assert "No feedback captured yet." in source

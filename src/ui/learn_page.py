@@ -575,6 +575,8 @@ def render_learn() -> None:
         st.session_state["last_learn_result"] = result
         st.session_state["last_learn_depth"] = depth_label
         st.session_state["last_learn_mode"] = learning_mode
+        st.session_state["last_learn_progressive_streaming"] = use_progressive_streaming
+        st.session_state["last_learn_force_regenerate"] = force_regenerate
 
         guide = result.get("study_guide")
         if guide:
