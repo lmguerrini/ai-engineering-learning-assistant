@@ -779,6 +779,7 @@ class TestLearnStreamingHelpers:
         result = {"study_guide": guide, "trace": ["generate_study_guide: done"]}
 
         with patch("src.ui.learn_page._display_study_guide") as display_guide, \
+             patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
@@ -795,7 +796,9 @@ class TestLearnStreamingHelpers:
             depth="Deep Study",
             mode="Topic",
             stream=True,
+            include_sources=False,
         )
+        display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
         display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
@@ -805,21 +808,62 @@ class TestLearnStreamingHelpers:
 
         from src.ui.learn_page import _display_learn_result_extras
 
-        result = {"trace": []}
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"trace": [], "study_guide": guide}
 
         with patch("src.ui.learn_page.st.markdown") as markdown, \
+             patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
-            _display_learn_result_extras(result, feedback_topic="AI Agents")
+            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
 
         headings = [call.args[0] for call in markdown.call_args_list]
         assert "#### Personalization" in headings
         assert "#### Workflow Trace" in headings
         assert "#### Feedback" in headings
+        display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
         display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
+
+    def test_display_learn_result_extras_renders_sources_before_other_sections(self):
+        from unittest.mock import patch
+
+        from src.ui.learn_page import _display_learn_result_extras
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"trace": [], "study_guide": guide}
+        order: list[str] = []
+
+        with patch(
+            "src.ui.learn_page._display_sources_section",
+            side_effect=lambda _: order.append("sources"),
+        ), patch(
+            "src.ui.learn_page._display_memory_section",
+            side_effect=lambda _: order.append("memory"),
+        ), patch(
+            "src.ui.learn_page._display_debug_trace",
+            side_effect=lambda *_args: order.append("trace"),
+        ), patch(
+            "src.ui.learn_page._display_feedback_widget",
+            side_effect=lambda *_args, **_kwargs: order.append("feedback"),
+        ):
+            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
+
+        assert order == ["sources", "memory", "trace", "feedback"]
 
 
 class TestLearnProgressiveStreamingToggle:
