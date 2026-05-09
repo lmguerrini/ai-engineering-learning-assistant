@@ -116,6 +116,7 @@ def run_rag_evaluation(
         return RAGEvalReport(
             retrieval=empty_summary,
             coverage=empty_coverage,
+            has_ragas=_check_ragas_available(),
             ragas_note=_ragas_availability_note(),
         )
 

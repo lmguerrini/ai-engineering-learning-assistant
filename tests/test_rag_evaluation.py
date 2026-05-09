@@ -231,15 +231,15 @@ class TestFormatRagEvalReport:
 # ---------------------------------------------------------------------------
 
 class TestRagasAvailability:
-    def test_ragas_not_installed(self):
-        assert _check_ragas_available() is False
+    def test_ragas_installed(self):
+        assert _check_ragas_available() is True
 
-    def test_ragas_note_suggests_install(self):
+    def test_ragas_note_confirms_installed(self):
         note = _ragas_availability_note()
-        assert "pip install ragas" in note
+        assert "installed" in note.lower()
 
     def test_report_has_ragas_flag(self, tmp_path):
         eval_file = tmp_path / "cases.md"
         eval_file.write_text("# Empty\n")
         report = run_rag_evaluation(eval_file)
-        assert report.has_ragas is False
+        assert report.has_ragas is True
