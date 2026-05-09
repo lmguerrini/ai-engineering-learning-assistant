@@ -114,7 +114,7 @@ def render_quiz() -> None:
         topic = st.selectbox("Topic", LEARN_TOPICS, key="quiz_topic")
     with col2:
         difficulty = st.selectbox(
-            "Learn Path",
+            "Difficulty",
             [d.value for d in DifficultyLevel],
             index=1,
             key="quiz_difficulty",
@@ -132,7 +132,7 @@ def render_quiz() -> None:
     last_guide = st.session_state.get("last_study_guide")
     if last_guide and hasattr(last_guide, "topic") and last_guide.topic == topic:
         study_context = last_guide.detailed_notes or last_guide.summary or ""
-        st.caption("Using context from your last Learn Path.")
+        st.caption("Using context from your last Learn session.")
 
     generate = st.button("Generate Quiz", key="btn_generate_quiz")
 

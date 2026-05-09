@@ -594,6 +594,21 @@ class TestLearnSubtitle:
         assert "Learn Path" in source
 
 
+class TestQuizUiCopy:
+    """Quiz page labels should match the current workflow terminology."""
+
+    def test_quiz_uses_difficulty_label(self):
+        with open("src/ui/quiz_page.py") as f:
+            source = f.read()
+        assert '"Difficulty"' in source
+        assert '"Learn Path"' not in source
+
+    def test_quiz_context_caption_is_generic(self):
+        with open("src/ui/quiz_page.py") as f:
+            source = f.read()
+        assert "Using context from your last Learn session." in source
+
+
 class TestSidebarStatus:
     """Sidebar should show compact status info."""
 
