@@ -114,7 +114,7 @@ class TestDashboardSnapshotHelpers:
     """Short reviewer-facing snapshot labels should stay clear."""
 
     def test_ragas_snapshot_value_ready_when_report_present(self):
-        assert _ragas_snapshot_value(object()) == "Latest saved"
+        assert _ragas_snapshot_value(object()) == "Cached"
 
     def test_ragas_snapshot_value_not_run_without_report(self):
         assert _ragas_snapshot_value(None) == "Not run"
@@ -321,6 +321,7 @@ class TestRenderRagasSection:
         assert len(warning_calls) >= 1
         warning_text = " ".join(str(call) for call in warning_calls)
         assert "5–10" in warning_text or "5-10" in warning_text
+        assert "💰" not in warning_text
 
     @patch("src.ui.dashboard_page.st")
     def test_loads_cached_results_on_render(self, mock_st):
@@ -370,6 +371,7 @@ class TestRenderRagasSection:
         info_calls = [str(c) for c in mock_st.info.call_args_list]
         has_cached_msg = any("latest saved benchmark" in c for c in info_calls)
         assert has_cached_msg, f"Cached info message not found in: {info_calls}"
+        assert all("💡" not in c for c in info_calls)
 
 
 class TestDashboardUsageTables:
@@ -446,13 +448,21 @@ class TestDashboardUsageTables:
         _display_session_cost_summary()
 
         markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
-        assert any(
-            "| Run Type | Learning Mode | Learning Depth | Progressive Streaming | Cache Bypass | Cache Hit | Model | Operation | Tokens | Est. Cost |"
-            in text
-            for text in markdown_calls
-        )
-        assert any("| Topic | Deep Study | On | Off | Off |" in text for text in markdown_calls)
-        assert any("| — | — | — | — | On |" in text for text in markdown_calls)
+        assert any("#### All Session Operations" in text for text in markdown_calls)
+
+        mock_st.dataframe.assert_called_once()
+        dataframe_rows = mock_st.dataframe.call_args.args[0]
+        assert dataframe_rows[0]["Type"] == "Learn"
+        assert dataframe_rows[0]["Mode"] == "Topic"
+        assert dataframe_rows[0]["Depth"] == "Deep Study"
+        assert dataframe_rows[0]["Stream"] == "On"
+        assert dataframe_rows[0]["Bypass"] == "Off"
+        assert dataframe_rows[0]["Cache"] == "Off"
+        assert dataframe_rows[1]["Mode"] == "—"
+        assert dataframe_rows[1]["Cache"] == "On"
+        assert mock_st.dataframe.call_args.kwargs["use_container_width"] is True
+        assert mock_st.dataframe.call_args.kwargs["hide_index"] is True
 
         caption_calls = [str(c) for c in mock_st.caption.call_args_list]
         assert any("all tracked llm operations" in c.lower() for c in caption_calls)
+        assert any("session total:" in c.lower() for c in caption_calls)

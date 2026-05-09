@@ -246,6 +246,9 @@ class TestFormatGraphStateSummary:
         assert "Memory Profile" in labels
         assert "Total Tokens" in labels
 
+        depth_field = next(f for f in fields if f["label"] == "Learning Depth")
+        assert depth_field["value"] == "Deep Study"
+
     def test_empty_result(self):
         fields = format_graph_state_summary({})
         labels = [f["label"] for f in fields]
@@ -258,6 +261,11 @@ class TestFormatGraphStateSummary:
         fields = format_graph_state_summary({"token_usage": {}})
         labels = [f["label"] for f in fields]
         assert "Total Tokens" not in labels
+
+    def test_concise_style_maps_to_summary(self):
+        fields = format_graph_state_summary({"style": MagicMock(value="concise")})
+        depth_field = next(f for f in fields if f["label"] == "Learning Depth")
+        assert depth_field["value"] == "Summary"
 
 
 class TestFormatMemoryTransparency:

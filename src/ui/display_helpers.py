@@ -157,6 +157,16 @@ def format_trace_entry(entry: str) -> str:
     return entry
 
 
+def _format_learning_depth_value(style) -> str:
+    """Map internal response-style values to user-facing dashboard labels."""
+    val = style.value if hasattr(style, "value") else str(style)
+    if val == "concise":
+        return "Summary"
+    if val == "detailed":
+        return "Deep Study"
+    return val
+
+
 def format_graph_state_summary(result: dict) -> list[dict]:
     """Extract key state fields from a workflow result for debug display.
 
@@ -174,8 +184,7 @@ def format_graph_state_summary(result: dict) -> list[dict]:
 
     style = result.get("style")
     if style:
-        val = style.value if hasattr(style, "value") else str(style)
-        fields.append({"label": "Learning Depth", "value": val})
+        fields.append({"label": "Learning Depth", "value": _format_learning_depth_value(style)})
 
     docs = result.get("retrieved_docs", [])
     fields.append({"label": "Passages Retrieved", "value": str(len(docs))})

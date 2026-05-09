@@ -70,6 +70,25 @@ def _format_context_value(value) -> str:
     return str(value)
 
 
+def _build_session_operation_rows(records: list[dict]) -> list[dict]:
+    """Convert stored usage records into compact dashboard table rows."""
+    return [
+        {
+            "Type": _operation_category(rec.get("operation", "unknown")),
+            "Mode": _format_context_value(rec.get("learning_mode")),
+            "Depth": _format_context_value(rec.get("learning_depth")),
+            "Stream": _format_context_value(rec.get("progressive_streaming")),
+            "Bypass": _format_context_value(rec.get("cache_bypass")),
+            "Cache": _format_context_value(rec.get("cache_hit")),
+            "Model": rec.get("model", "Unknown"),
+            "Operation": _operation_label(rec.get("operation", "unknown")),
+            "Tokens": f"{rec.get('total_tokens', 0):,}",
+            "Cost": f"${float(rec.get('estimated_cost_usd', 0.0) or 0.0):.6f}",
+        }
+        for rec in records
+    ]
+
+
 def _format_ragas_case_label(result) -> str:
     """Return a reviewer-friendly RAGAs case label."""
     difficulty = getattr(result, "difficulty", "") or ""
@@ -148,28 +167,19 @@ def _display_session_cost_summary() -> None:
         )
         return
 
-    rows = "".join(
-        f"| {_operation_category(rec.get('operation', 'unknown'))} | "
-        f"{_format_context_value(rec.get('learning_mode'))} | "
-        f"{_format_context_value(rec.get('learning_depth'))} | "
-        f"{_format_context_value(rec.get('progressive_streaming'))} | "
-        f"{_format_context_value(rec.get('cache_bypass'))} | "
-        f"{_format_context_value(rec.get('cache_hit'))} | "
-        f"{rec.get('model', 'Unknown')} | "
-        f"{_operation_label(rec.get('operation', 'unknown'))} | "
-        f"{rec.get('total_tokens', 0):,} | "
-        f"${float(rec.get('estimated_cost_usd', 0.0) or 0.0):.6f} |\n"
-        for rec in records
-    )
+    table_rows = _build_session_operation_rows(records)
+    st.markdown("#### All Session Operations")
     st.caption(
         "The table below includes all tracked LLM operations from this app session across "
         "Learn and Quiz. Cache hits typically reuse prior outputs and add no new token usage."
     )
-    st.markdown(
-        f"| Run Type | Learning Mode | Learning Depth | Progressive Streaming | Cache Bypass | Cache Hit | Model | Operation | Tokens | Est. Cost |\n"
-        f"|---|---|---|---|---|---|---|---|---|---|\n"
-        f"{rows}"
-        f"| **Total** |  |  |  |  |  |  |  | **{summary['total_tokens']:,}** | **${summary['estimated_cost_usd']:.6f}** |"
+    st.dataframe(
+        table_rows,
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(
+        f"Session total: {summary['total_tokens']:,} tokens · ${summary['estimated_cost_usd']:.6f}"
     )
 
     with st.expander("Raw details"):
@@ -224,7 +234,7 @@ def _ragas_snapshot_value(report) -> str:
     """Return a short reviewer-facing RAGAs readiness label."""
     if report is None:
         return "Not run"
-    return "Latest saved"
+    return "Cached"
 
 
 def _trace_snapshot_value(result: dict, trace_key: str) -> str:
@@ -288,14 +298,13 @@ def _render_ragas_section() -> None:
     _get_ragas_report()
 
     st.info(
-        "💡 Results below are from the **latest saved benchmark**. "
+        "Results below are from the **latest saved benchmark**. "
         "Click the button to run a fresh evaluation (costs money and takes 5–10 min)."
     )
     st.warning(
         "⚠️ Running RAGAs evaluation calls the OpenAI API (LLM judge) for each "
         "case and metric. The default 3 cases typically cost ~$0.01–0.03 and "
         "take 5–10 minutes. Do not run repeatedly without reason.",
-        icon="💰",
     )
 
     if st.button("▶ Run RAGAs Evaluation", key="run_ragas_eval"):
@@ -465,7 +474,7 @@ def render_advanced() -> None:
     top_cols[1].metric(
         "RAGAs Benchmark",
         _ragas_snapshot_value(ragas_report),
-        help="Latest saved means a cached benchmark report is available to inspect without rerunning it.",
+        help="Cached means a saved benchmark report is available to inspect without rerunning it.",
     )
     top_cols[2].metric(
         "Session Tokens",
@@ -481,7 +490,7 @@ def render_advanced() -> None:
     signal_cols = st.columns(4)
     signal_cols[0].metric(
         "Memory Profile",
-        "Loaded" if mem["loaded"] else "No memory yet",
+        "Loaded" if mem["loaded"] else "Empty",
         help="Personalization becomes richer after saved quiz results and repeated study sessions accumulate.",
     )
     signal_cols[1].metric(
