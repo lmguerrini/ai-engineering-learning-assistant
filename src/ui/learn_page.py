@@ -57,15 +57,20 @@ def _show_cached_learn_result() -> None:
 
 
 def _display_learn_result(result: dict, *, depth: str, mode: str,
-                          stream: bool = False) -> None:
+                          stream: bool = False, render_guide: bool = True) -> None:
     """Display a Learn workflow result with optional UI-only streaming replay."""
     error = result.get("error")
     if error:
         st.error(error)
         return
     guide = result.get("study_guide")
-    if guide:
+    if guide and render_guide:
         _display_study_guide(guide, depth=depth, mode=mode, stream=stream)
+    _display_learn_result_extras(result)
+
+
+def _display_learn_result_extras(result: dict) -> None:
+    """Render non-guide Learn result sections."""
     _display_memory_section(result)
     _display_debug_trace(result, "Learn Workflow Trace")
 
@@ -138,7 +143,9 @@ def _stream_markdown(text: str, *, unsafe_allow_html: bool = False) -> None:
 # ---------------------------------------------------------------------------
 
 def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
-                         mode: str = "Topic", stream: bool = False) -> None:
+                         mode: str = "Topic", stream: bool = False,
+                         include_sources: bool = True,
+                         show_topic_key_concepts: bool = False) -> None:
     """Render a structured Learn Path in the Streamlit UI."""
     if mode == "Learn Path":
         level_label = guide.difficulty.value.capitalize()
@@ -154,6 +161,15 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
         _stream_markdown(guide.summary)
     else:
         st.markdown(guide.summary)
+
+    if mode == "Topic" and show_topic_key_concepts and guide.key_concepts:
+        st.markdown("#### Key Concepts")
+        for concept in guide.key_concepts:
+            if ":" in concept:
+                name, desc = concept.split(":", 1)
+                st.markdown(f"- **{name.strip()}** — {desc.strip()}")
+            else:
+                st.markdown(f"- **{concept}**")
 
     # --- Table of Contents for Topic mode ---
     if mode == "Topic" and guide.detailed_notes:
@@ -227,8 +243,9 @@ def _display_study_guide(guide: StudyGuide, depth: str = "Deep Study",
         else:
             st.markdown(notes, unsafe_allow_html=_has_html)
 
-    st.markdown("---")
-    _display_sources_section(guide)
+    if include_sources:
+        st.markdown("---")
+        _display_sources_section(guide)
 
 
 # ---------------------------------------------------------------------------
@@ -408,8 +425,21 @@ def render_learn() -> None:
     )
     generate = st.button(btn_label, key="btn_learn")
     displayed_result_this_run = False
+    progressive_result_slot = st.empty() if generate else None
 
     if generate:
+        def _progress_callback(progress_guide: StudyGuide) -> None:
+            if progressive_result_slot is None:
+                return
+            with progressive_result_slot.container():
+                _display_study_guide(
+                    progress_guide,
+                    depth=depth_label,
+                    mode=learning_mode,
+                    include_sources=False,
+                    show_topic_key_concepts=True,
+                )
+
         if learning_mode != "Learn Path":
             spinner_msg = "Generating topic — this may take a moment…"
         elif depth_label == "Deep Study":
@@ -424,6 +454,7 @@ def render_learn() -> None:
                 difficulty=difficulty,
                 style=style,
                 force_regenerate=force_regenerate,
+                progress_callback=_progress_callback,
             )
 
         st.session_state["last_learn_result"] = result
@@ -438,11 +469,19 @@ def render_learn() -> None:
         st.session_state["last_learn_tokens"] = result.get("token_usage", {})
         _accumulate_usage_records(result.get("usage_records", []))
         if _should_stream_learn_result(result):
+            guide = result.get("study_guide")
+            if guide and progressive_result_slot is not None:
+                with progressive_result_slot.container():
+                    _display_study_guide(
+                        guide,
+                        depth=depth_label,
+                        mode=learning_mode,
+                    )
             _display_learn_result(
                 result,
                 depth=depth_label,
                 mode=learning_mode,
-                stream=True,
+                render_guide=False,
             )
             displayed_result_this_run = True
 

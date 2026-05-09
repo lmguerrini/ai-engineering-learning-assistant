@@ -568,59 +568,82 @@ def _generate_deep_study_learn_path(state: LearningState) -> dict:
 
     try:
         client = wrap_openai(OpenAI(api_key=settings.openai_api_key))
-
-        def _llm_call() -> Any:
-            return client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=16384,
-            )
-
-        response = with_retry(
-            callable=_llm_call,
-            max_attempts=2,
-            base_delay=1.0,
-            handled_exceptions=(Exception,),
-        )
-        raw = response.choices[0].message.content or ""
-        usage = response.usage
-        if usage:
-            token_usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0) + (usage.prompt_tokens or 0)
-            token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
-            token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
-
-        usage_dict = {
-            "prompt_tokens": usage.prompt_tokens if usage else 0,
-            "completion_tokens": usage.completion_tokens if usage else 0,
-            "total_tokens": usage.total_tokens if usage else 0,
-        }
-        usage_records.append(build_usage_record(model, "learn_guide_generation", usage_dict))
-
-        trace.append(f"generate_study_guide: LLM returned {len(raw)} chars (markdown)")
-
-        # --- Build StudyGuide manually from markdown ---
         topic = state.get("topic", "Deep Study")
         difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
-
-        # Use stable, professionally-capitalised topic list
         topic_parts = topic.split(":", 1)
         curriculum_title = topic_parts[0].strip()
         level_label = difficulty.value.capitalize()
         key_concepts = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
-
-        summary = _extract_summary_from_markdown(raw)
         sources = _build_sources_list(state)
 
-        guide = StudyGuide(
+        summary_raw = _call_llm_text(
+            client,
+            model=model,
+            prompt=_build_progressive_summary_prompt(state),
+            max_tokens=1200,
+            temperature=0.2,
+            trace=trace,
+            trace_label="generate_study_guide: overview stage",
+            token_usage=token_usage,
+            usage_records=usage_records,
+            usage_operation="learn_guide_overview_generation",
+        )
+        summary_data = _parse_json_payload(summary_raw)
+        summary = str(summary_data.get("summary", "")).strip()
+        if not summary:
+            summary = "Deep Study curriculum reference."
+
+        detailed_sections: list[str] = []
+        guide = _build_progressive_guide(
             topic=curriculum_title,
             difficulty=difficulty,
             summary=summary,
             key_concepts=key_concepts,
-            detailed_notes=raw.strip(),
+            detailed_notes="",
             sources=sources,
         )
-        trace.append("generate_study_guide: StudyGuide built from markdown")
+        _emit_progress_update(state, guide, trace, "overview")
+
+        for idx, section_topic in enumerate(key_concepts, 1):
+            section_raw = _call_llm_text(
+                client,
+                model=model,
+                prompt=_build_progressive_learn_path_section_prompt(
+                    state,
+                    summary=summary,
+                    topic_name=section_topic,
+                    section_number=idx,
+                ),
+                max_tokens=3072,
+                temperature=0.3,
+                trace=trace,
+                trace_label=f"generate_study_guide: topic section {idx}",
+                token_usage=token_usage,
+                usage_records=usage_records,
+                usage_operation="learn_guide_section_generation",
+            )
+            cleaned_section = _strip_code_fences(section_raw).strip()
+            if cleaned_section:
+                detailed_sections.append(cleaned_section)
+                guide = _build_progressive_guide(
+                    topic=curriculum_title,
+                    difficulty=difficulty,
+                    summary=summary,
+                    key_concepts=key_concepts,
+                    detailed_notes="\n\n".join(detailed_sections).strip(),
+                    sources=sources,
+                )
+                _emit_progress_update(state, guide, trace, f"topic-{idx}")
+
+        guide = _build_progressive_guide(
+            topic=curriculum_title,
+            difficulty=difficulty,
+            summary=summary,
+            key_concepts=key_concepts,
+            detailed_notes="\n\n".join(detailed_sections).strip(),
+            sources=sources,
+        )
+        trace.append("generate_study_guide: StudyGuide built from progressive sections")
 
         # Cache the result
         try:
@@ -685,52 +708,78 @@ def _generate_deep_study_topic(state: LearningState) -> dict:
 
     try:
         client = wrap_openai(OpenAI(api_key=settings.openai_api_key))
-
-        def _llm_call() -> Any:
-            return client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=16384,
-            )
-
-        response = with_retry(
-            callable=_llm_call,
-            max_attempts=2,
-            base_delay=1.0,
-            handled_exceptions=(Exception,),
-        )
-        raw = response.choices[0].message.content or ""
-        usage = response.usage
-        if usage:
-            token_usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0) + (usage.prompt_tokens or 0)
-            token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
-            token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
-
-        usage_dict = {
-            "prompt_tokens": usage.prompt_tokens if usage else 0,
-            "completion_tokens": usage.completion_tokens if usage else 0,
-            "total_tokens": usage.total_tokens if usage else 0,
-        }
-        usage_records.append(build_usage_record(model, "learn_guide_generation", usage_dict))
-
-        trace.append(f"generate_study_guide: LLM returned {len(raw)} chars (markdown)")
-
-        # --- Build StudyGuide manually from markdown ---
         topic = state.get("topic", "Deep Study")
         difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
-        summary = _extract_summary_from_markdown(raw)
         sources = _build_sources_list(state)
+        summary_raw = _call_llm_text(
+            client,
+            model=model,
+            prompt=_build_progressive_summary_prompt(state),
+            max_tokens=1400,
+            temperature=0.2,
+            trace=trace,
+            trace_label="generate_study_guide: overview stage",
+            token_usage=token_usage,
+            usage_records=usage_records,
+            usage_operation="learn_guide_overview_generation",
+        )
+        summary_data = _parse_json_payload(summary_raw)
+        summary = str(summary_data.get("summary", "")).strip()
+        if not summary:
+            summary = f"An overview of {topic}."
+        key_concepts = _coerce_key_concepts(summary_data.get("key_concepts"), [topic])
 
-        guide = StudyGuide(
+        detailed_sections: list[str] = []
+        guide = _build_progressive_guide(
             topic=topic,
             difficulty=difficulty,
             summary=summary,
-            key_concepts=[topic],
-            detailed_notes=raw.strip(),
+            key_concepts=key_concepts,
+            detailed_notes="",
             sources=sources,
         )
-        trace.append("generate_study_guide: StudyGuide built from markdown")
+        _emit_progress_update(state, guide, trace, "overview")
+
+        for idx, section_bundle in enumerate(_TOPIC_DEEP_STUDY_BUNDLES, 1):
+            section_raw = _call_llm_text(
+                client,
+                model=model,
+                prompt=_build_progressive_topic_section_prompt(
+                    state,
+                    summary=summary,
+                    key_concepts=key_concepts,
+                    section_names=section_bundle,
+                ),
+                max_tokens=4096,
+                temperature=0.3,
+                trace=trace,
+                trace_label=f"generate_study_guide: section bundle {idx}",
+                token_usage=token_usage,
+                usage_records=usage_records,
+                usage_operation="learn_guide_section_generation",
+            )
+            cleaned_section = _strip_code_fences(section_raw).strip()
+            if cleaned_section:
+                detailed_sections.append(cleaned_section)
+                guide = _build_progressive_guide(
+                    topic=topic,
+                    difficulty=difficulty,
+                    summary=summary,
+                    key_concepts=key_concepts,
+                    detailed_notes="\n\n".join(detailed_sections).strip(),
+                    sources=sources,
+                )
+                _emit_progress_update(state, guide, trace, f"bundle-{idx}")
+
+        guide = _build_progressive_guide(
+            topic=topic,
+            difficulty=difficulty,
+            summary=summary,
+            key_concepts=key_concepts,
+            detailed_notes="\n\n".join(detailed_sections).strip(),
+            sources=sources,
+        )
+        trace.append("generate_study_guide: StudyGuide built from progressive sections")
 
         # Cache the result
         try:
