@@ -8,6 +8,9 @@ from src.ui.dashboard_page import (
     _check_ragas_available,
     _metric_color,
     _fmt_metric,
+    _format_ragas_case_label,
+    _metric_status_label,
+    _ragas_snapshot_value,
 )
 
 
@@ -104,6 +107,34 @@ class TestFmtMetric:
 
 
 # ---------------------------------------------------------------------------
+# Dashboard snapshot helpers
+# ---------------------------------------------------------------------------
+
+class TestDashboardSnapshotHelpers:
+    """Short reviewer-facing snapshot labels should stay clear."""
+
+    def test_ragas_snapshot_value_ready_when_report_present(self):
+        assert _ragas_snapshot_value(object()) == "Cached"
+
+    def test_ragas_snapshot_value_not_run_without_report(self):
+        assert _ragas_snapshot_value(None) == "Not run"
+
+    def test_metric_status_label_uses_normal_status_dot_for_answer_correctness(self):
+        assert _metric_status_label("answer_correctness", 0.1) == "🔴"
+
+    @patch("src.ui.dashboard_page.st")
+    def test_trace_snapshot_value_uses_dash_when_no_run_available(self, mock_st):
+        from src.ui.dashboard_page import _trace_snapshot_value
+
+        mock_st.session_state = {}
+        assert _trace_snapshot_value({}, "last_learn_trace") == "—"
+
+    def test_ragas_case_label_capitalizes_difficulty(self):
+        case = MagicMock(topic="AI Agents and Tool Calling", difficulty="advanced")
+        assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced)"
+
+
+# ---------------------------------------------------------------------------
 # _display_ragas_report (integration-level with mocked st)
 # ---------------------------------------------------------------------------
 
@@ -127,7 +158,7 @@ class TestDisplayRagasReport:
                 ),
                 RAGAsCaseResult(
                     topic="AI Agents",
-                    difficulty="intermediate",
+                    difficulty="advanced",
                     faithfulness=None,
                     answer_relevancy=0.70,
                     context_precision=0.54,
@@ -205,6 +236,35 @@ class TestDisplayRagasReport:
         assert has_diagnostic, f"Diagnostic note not found in caption calls: {caption_calls}"
 
     @patch("src.ui.dashboard_page.st")
+    def test_display_shows_borderline_variance_note(self, mock_st):
+        from src.ui.dashboard_page import _display_ragas_report
+
+        self._setup_mock_st(mock_st)
+        report = self._make_report()
+        _display_ragas_report(report)
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("borderline yellow" in c.lower() for c in caption_calls)
+
+    @patch("src.ui.dashboard_page.st")
+    def test_display_keeps_answer_correctness_diagnostic_role_with_normal_status_dot(self, mock_st):
+        from src.ui.dashboard_page import _display_ragas_report
+
+        self._setup_mock_st(mock_st)
+        report = self._make_report()
+        _display_ragas_report(report)
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        table_calls = [text for text in markdown_calls if "| Metric | Score | Status | Role |" in text]
+        assert any(
+            "| Answer Correctness |" in text
+            and "| Diagnostic |" in text
+            and "Diagnostic only" not in text
+            and ("🟡" in text or "🔴" in text or "🟢" in text)
+            for text in table_calls
+        )
+
+    @patch("src.ui.dashboard_page.st")
     def test_display_shows_error_case(self, mock_st):
         from src.ui.dashboard_page import _display_ragas_report
         from src.eval.ragas_evaluation import RAGAsReport, RAGAsCaseResult
@@ -272,6 +332,9 @@ class TestRenderRagasSection:
             if "cost" in str(call).lower() or "LLM judge" in str(call)
         ]
         assert len(warning_calls) >= 1
+        warning_text = " ".join(str(call) for call in warning_calls)
+        assert "5–10" in warning_text or "5-10" in warning_text
+        assert "💰" not in warning_text
 
     @patch("src.ui.dashboard_page.st")
     def test_loads_cached_results_on_render(self, mock_st):
@@ -321,3 +384,98 @@ class TestRenderRagasSection:
         info_calls = [str(c) for c in mock_st.info.call_args_list]
         has_cached_msg = any("latest saved benchmark" in c for c in info_calls)
         assert has_cached_msg, f"Cached info message not found in: {info_calls}"
+        assert all("💡" not in c for c in info_calls)
+
+
+class TestDashboardUsageTables:
+    """Session usage tables should clearly separate latest-run and all-session views."""
+
+    @patch("src.ui.dashboard_page.st")
+    def test_latest_run_context_caption_clarifies_scope(self, mock_st):
+        from src.ui.dashboard_page import _display_latest_run_contexts
+
+        mock_st.session_state = {
+            "last_learn_mode": "Topic",
+            "last_learn_depth": "Deep Study",
+            "last_learn_progressive_streaming": True,
+            "last_learn_force_regenerate": False,
+            "quiz_selected_topic": "AI Agents",
+        }
+        mock_st.columns.side_effect = lambda *a, **kw: [
+            MagicMock() for _ in range(a[0] if isinstance(a[0], int) else len(a[0]))
+        ]
+
+        learn_result = {
+            "trace": ["Cache miss"],
+            "token_usage": {"total_tokens": 1200},
+            "usage_records": [{"estimated_cost_usd": 0.0012}],
+        }
+        quiz_result = {
+            "topic": "AI Agents",
+            "trace": ["Cache hit"],
+            "token_usage": {"total_tokens": 300},
+            "usage_records": [{"estimated_cost_usd": 0.0003}],
+        }
+        _display_latest_run_contexts(learn_result, quiz_result)
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("latest learn run and latest quiz run only" in c.lower() for c in caption_calls)
+
+    @patch("src.ui.dashboard_page.st")
+    def test_session_cost_summary_shows_context_columns(self, mock_st):
+        from src.ui.dashboard_page import _display_session_cost_summary
+
+        mock_st.session_state = {
+            "session_usage_records": [
+                {
+                    "model": "gpt-4o-mini",
+                    "operation": "learn_guide_overview_generation",
+                    "total_tokens": 1200,
+                    "prompt_tokens": 800,
+                    "completion_tokens": 400,
+                    "estimated_cost_usd": 0.0012,
+                    "learning_mode": "Topic",
+                    "learning_depth": "Deep Study",
+                    "progressive_streaming": True,
+                    "cache_bypass": False,
+                    "cache_hit": False,
+                },
+                {
+                    "model": "gpt-4o-mini",
+                    "operation": "quiz_generation",
+                    "total_tokens": 300,
+                    "prompt_tokens": 200,
+                    "completion_tokens": 100,
+                    "estimated_cost_usd": 0.0003,
+                    "learning_mode": None,
+                    "learning_depth": None,
+                    "progressive_streaming": None,
+                    "cache_bypass": None,
+                    "cache_hit": True,
+                },
+            ]
+        }
+        mock_st.expander.return_value.__enter__ = MagicMock()
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+
+        _display_session_cost_summary()
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        assert any("#### All Session Operations" in text for text in markdown_calls)
+
+        mock_st.dataframe.assert_called_once()
+        dataframe_rows = mock_st.dataframe.call_args.args[0]
+        assert dataframe_rows[0]["Type"] == "Learn"
+        assert dataframe_rows[0]["Mode"] == "Topic"
+        assert dataframe_rows[0]["Depth"] == "Deep Study"
+        assert dataframe_rows[0]["Stream"] == "On"
+        assert dataframe_rows[0]["Bypass"] == "Off"
+        assert dataframe_rows[0]["Cache"] == "Off"
+        assert dataframe_rows[1]["Mode"] == "—"
+        assert dataframe_rows[1]["Cache"] == "On"
+        assert mock_st.dataframe.call_args.kwargs["use_container_width"] is True
+        assert mock_st.dataframe.call_args.kwargs["hide_index"] is True
+
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert any("all tracked llm operations" in c.lower() for c in caption_calls)
+        assert any("session total:" in c.lower() for c in caption_calls)

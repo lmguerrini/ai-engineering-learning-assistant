@@ -67,12 +67,31 @@ def _display_learn_result(result: dict, *, depth: str, mode: str,
         return
     guide = result.get("study_guide")
     if guide and render_guide:
-        _display_study_guide(guide, depth=depth, mode=mode, stream=stream)
-    _display_learn_result_extras(result, feedback_topic=feedback_topic or result.get("topic", ""))
+        _display_study_guide(
+            guide,
+            depth=depth,
+            mode=mode,
+            stream=stream,
+            include_sources=False,
+        )
+    _display_learn_result_extras(
+        result,
+        guide=guide,
+        feedback_topic=feedback_topic or result.get("topic", ""),
+    )
 
 
-def _display_learn_result_extras(result: dict, *, feedback_topic: str) -> None:
-    """Render non-guide Learn result sections."""
+def _display_learn_result_extras(
+    result: dict,
+    *,
+    guide: StudyGuide | None,
+    feedback_topic: str,
+) -> None:
+    """Render Learn post-result sections strictly after the study guide."""
+    if guide is not None:
+        st.markdown("---")
+        _display_sources_section(guide)
+
     st.markdown("---")
     st.markdown("#### Personalization")
     _display_memory_section(result)
@@ -556,6 +575,8 @@ def render_learn() -> None:
         st.session_state["last_learn_result"] = result
         st.session_state["last_learn_depth"] = depth_label
         st.session_state["last_learn_mode"] = learning_mode
+        st.session_state["last_learn_progressive_streaming"] = use_progressive_streaming
+        st.session_state["last_learn_force_regenerate"] = force_regenerate
 
         guide = result.get("study_guide")
         if guide:
@@ -572,6 +593,7 @@ def render_learn() -> None:
                         guide,
                         depth=depth_label,
                         mode=learning_mode,
+                        include_sources=False,
                     )
             _display_learn_result(
                 result,

@@ -52,6 +52,10 @@ class TestRAGAsEvalCase:
         agent_case = [c for c in DEFAULT_CASES if "Agent" in c.topic][0]
         assert "tool calling" in agent_case.user_input.lower()
 
+    def test_agents_case_is_advanced(self):
+        agent_case = [c for c in DEFAULT_CASES if "Agent" in c.topic][0]
+        assert agent_case.difficulty == "advanced"
+
     def test_case_fields(self):
         case = RAGAsEvalCase(
             topic="Test", difficulty="beginner",
@@ -235,6 +239,7 @@ class TestFormatReport:
         assert "Test Topic" in text
         assert "0.9500" in text
         assert "✅" in text
+        assert "(Beginner)" in text
 
     def test_format_with_error(self):
         report = RAGAsReport(

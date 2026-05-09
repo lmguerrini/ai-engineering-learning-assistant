@@ -179,7 +179,10 @@ def _display_sources_section(guide: StudyGuide) -> None:
     all_sources = guide.sources if guide else []
     sources = deduplicate_sources(all_sources) if all_sources else []
     st.markdown("#### Sources")
-    st.caption("Sources used to ground this generated learning content.")
+    st.caption(
+        "Sources used to ground this generated learning content. Retrieved passages are "
+        "deduplicated by source file in this view."
+    )
 
     if not sources:
         st.info(
@@ -195,7 +198,7 @@ def _display_sources_section(guide: StudyGuide) -> None:
         file_word = "source" if unique_count == 1 else "sources"
         st.markdown(
             f"_{total_retrieved} context {passage_word} retrieved "
-            f"→ {unique_count} unique {file_word} displayed._"
+            f"→ {unique_count} unique {file_word} displayed after deduplication by source file._"
         )
     else:
         st.markdown(f"_{format_sources_summary(sources)}_")
@@ -483,7 +486,49 @@ def _display_feedback_widget(
             st.session_state[saved_key] = True
 
 
+def _result_has_cache_hit(result: dict | None) -> bool:
+    """Return whether a stored workflow result came from cache."""
+    trace = (result or {}).get("trace", [])
+    return any("cache hit" in str(step).lower() for step in trace)
+
+
+def _annotate_usage_record(record: dict) -> dict:
+    """Attach reviewer-facing run context to one stored usage record."""
+    annotated = dict(record)
+    operation = str(annotated.get("operation", "") or "")
+
+    annotated.setdefault("learning_mode", None)
+    annotated.setdefault("learning_depth", None)
+    annotated.setdefault("progressive_streaming", None)
+    annotated.setdefault("cache_bypass", None)
+    annotated.setdefault("cache_hit", None)
+
+    if operation.startswith("learn_"):
+        annotated["learning_mode"] = st.session_state.get("last_learn_mode")
+        annotated["learning_depth"] = st.session_state.get("last_learn_depth")
+        annotated["progressive_streaming"] = (
+            st.session_state["last_learn_progressive_streaming"]
+            if "last_learn_progressive_streaming" in st.session_state
+            else None
+        )
+        annotated["cache_bypass"] = (
+            st.session_state["last_learn_force_regenerate"]
+            if "last_learn_force_regenerate" in st.session_state
+            else None
+        )
+        annotated["cache_hit"] = _result_has_cache_hit(
+            st.session_state.get("last_learn_result")
+        )
+    elif operation.startswith("quiz_"):
+        annotated["cache_hit"] = _result_has_cache_hit(
+            st.session_state.get("last_quiz_gen_result")
+        )
+
+    return annotated
+
+
 def _accumulate_usage_records(records: list[dict]) -> None:
     """Append new usage records to session-level accumulator."""
     existing = st.session_state.get("session_usage_records", [])
-    st.session_state["session_usage_records"] = existing + records
+    annotated_records = [_annotate_usage_record(record) for record in records]
+    st.session_state["session_usage_records"] = existing + annotated_records

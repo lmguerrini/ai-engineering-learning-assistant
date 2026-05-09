@@ -3,3 +3,7 @@ headless = true
 
 [client]
 toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#1565c0"

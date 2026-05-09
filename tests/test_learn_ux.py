@@ -1,6 +1,7 @@
 """Tests for Learn UX quality improvements."""
 
 import pytest
+from unittest.mock import patch
 
 from src.schemas import ResponseStyle, DifficultyLevel, Source, StudyGuide
 from src.ui.display_helpers import (
@@ -779,6 +780,7 @@ class TestLearnStreamingHelpers:
         result = {"study_guide": guide, "trace": ["generate_study_guide: done"]}
 
         with patch("src.ui.learn_page._display_study_guide") as display_guide, \
+             patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
@@ -795,7 +797,9 @@ class TestLearnStreamingHelpers:
             depth="Deep Study",
             mode="Topic",
             stream=True,
+            include_sources=False,
         )
+        display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
         display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
@@ -805,21 +809,62 @@ class TestLearnStreamingHelpers:
 
         from src.ui.learn_page import _display_learn_result_extras
 
-        result = {"trace": []}
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"trace": [], "study_guide": guide}
 
         with patch("src.ui.learn_page.st.markdown") as markdown, \
+             patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
-            _display_learn_result_extras(result, feedback_topic="AI Agents")
+            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
 
         headings = [call.args[0] for call in markdown.call_args_list]
         assert "#### Personalization" in headings
         assert "#### Workflow Trace" in headings
         assert "#### Feedback" in headings
+        display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
         display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
+
+    def test_display_learn_result_extras_renders_sources_before_other_sections(self):
+        from unittest.mock import patch
+
+        from src.ui.learn_page import _display_learn_result_extras
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Summary",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        result = {"trace": [], "study_guide": guide}
+        order: list[str] = []
+
+        with patch(
+            "src.ui.learn_page._display_sources_section",
+            side_effect=lambda _: order.append("sources"),
+        ), patch(
+            "src.ui.learn_page._display_memory_section",
+            side_effect=lambda _: order.append("memory"),
+        ), patch(
+            "src.ui.learn_page._display_debug_trace",
+            side_effect=lambda *_args: order.append("trace"),
+        ), patch(
+            "src.ui.learn_page._display_feedback_widget",
+            side_effect=lambda *_args, **_kwargs: order.append("feedback"),
+        ):
+            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
+
+        assert order == ["sources", "memory", "trace", "feedback"]
 
 
 class TestLearnProgressiveStreamingToggle:
@@ -900,12 +945,43 @@ class TestSidebarStatus:
             source = f.read()
         assert "LangSmith:" in source
 
+    def test_sidebar_has_kb_index_status(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "KB Index:" in source
+        runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
+        kb_status = 'st.caption(f"KB Index: {_kb_status}")'
+        model_line = 'st.caption(f"Model: {_s.app_default_model}")'
+        assert source.index(runtime_info) < source.index(kb_status)
+        assert source.index(kb_status) < source.index(model_line)
+
     def test_runtime_info_renders_after_active_page(self):
         with open("app.py") as f:
             source = f.read()
         page_render = 'SECTIONS[st.session_state["active_section"]]()'
         runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
         assert source.index(page_render) < source.index(runtime_info)
+
+
+class TestAppAccentTheme:
+    """Non-error interactive accents should use the blue app theme."""
+
+    def test_streamlit_theme_uses_dark_base_and_blue_primary_accent(self):
+        with open(".streamlit/config.toml") as f:
+            source = f.read()
+        assert "[theme]" in source
+        assert 'base = "dark"' in source
+        assert 'primaryColor = "#1565c0"' in source
+
+    def test_app_css_overrides_focus_states_to_blue(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "focus/selected states do not read as errors" in source
+        assert "div[data-baseweb=\"input\"] > div:focus-within" in source
+        assert "div[data-baseweb=\"textarea\"] > div:focus-within" in source
+        assert "div[data-baseweb=\"select\"] > div:focus-within" in source
+        assert ".stSlider [data-baseweb=\"slider\"] [role=\"slider\"]" in source
+        assert ".stSlider [data-baseweb=\"slider\"] [role=\"progressbar\"]" in source
 
 
 class TestTopicAwareRetrieval:
@@ -1350,8 +1426,119 @@ class TestDashboardStructure:
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         # Dashboard should use st.subheader for main sections
-        assert "st.subheader(\"Overview\")" in source
-        assert "st.subheader(\"Costs\")" in source
-        assert "st.subheader(\"Memory\")" in source
-        assert "st.subheader(\"Feedback\")" in source
-        assert "st.subheader(\"Workflow Traces\")" in source
+        assert "st.subheader(\"Review Snapshot\")" in source
+        assert "st.subheader(\"Observability\")" in source
+        assert "st.subheader(\"Knowledge Base Health\")" in source
+        assert "st.subheader(\"Token and Cost Tracking\")" in source
+        assert "st.subheader(\"Evaluation Readiness (RAGAs)\")" in source
+        assert "st.subheader(\"Learning Signals\")" in source
+        assert "st.subheader(\"Workflow Readiness\")" in source
+
+    def test_dashboard_highlights_project_strengths(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "**Project Strengths**" in source
+        assert "Cached RAGAs benchmark" in source
+
+    def test_dashboard_uses_snapshot_metrics(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert 'top_cols[0].metric(' in source
+        assert 'signal_cols[0].metric(' in source
+
+    def test_dashboard_has_latest_run_context_for_cost_tracking(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '"#### Latest Run Context"' in source
+        assert "Learning Mode" in source
+        assert "Progressive Streaming" in source
+        assert "Cache Bypass" in source
+        assert "Cache Hit" in source
+        assert '"#### All Session Operations"' in source
+        assert "use_container_width=True" in source
+
+    def test_dashboard_uses_clearer_learning_signal_empty_states(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "No saved learning memory yet." in source
+        assert "No feedback captured yet." in source
+
+    def test_dashboard_uses_shorter_snapshot_values(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert 'return "Cached"' in source
+        assert '"Loaded" if mem["loaded"] else "Empty"' in source
+
+    def test_dashboard_has_kb_rebuild_button(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '"Rebuild KB Index"' in source
+
+    def test_dashboard_uses_dividers_between_major_sections(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert source.count("st.divider()") >= 6
+
+    def test_sources_copy_explains_source_file_deduplication(self):
+        with open("src/ui/shared.py") as f:
+            source = f.read()
+        assert "deduplicated by source file in this view" in source
+        assert "displayed after deduplication by source file" in source
+
+
+class TestUsageRecordAccumulation:
+    """Stored usage records should keep the run context needed by the dashboard."""
+
+    @patch("src.ui.shared.st")
+    def test_accumulate_usage_records_adds_learn_context(self, mock_st):
+        from src.ui.shared import _accumulate_usage_records
+
+        mock_st.session_state = {
+            "session_usage_records": [],
+            "last_learn_mode": "Topic",
+            "last_learn_depth": "Deep Study",
+            "last_learn_progressive_streaming": True,
+            "last_learn_force_regenerate": False,
+            "last_learn_result": {"trace": ["Cache miss"]},
+        }
+
+        _accumulate_usage_records([
+            {
+                "model": "gpt-4o-mini",
+                "operation": "learn_guide_section_generation",
+                "total_tokens": 800,
+                "estimated_cost_usd": 0.001,
+            }
+        ])
+
+        record = mock_st.session_state["session_usage_records"][0]
+        assert record["learning_mode"] == "Topic"
+        assert record["learning_depth"] == "Deep Study"
+        assert record["progressive_streaming"] is True
+        assert record["cache_bypass"] is False
+        assert record["cache_hit"] is False
+
+    @patch("src.ui.shared.st")
+    def test_accumulate_usage_records_marks_quiz_context_as_not_applicable(self, mock_st):
+        from src.ui.shared import _accumulate_usage_records
+
+        mock_st.session_state = {
+            "session_usage_records": [],
+            "last_quiz_gen_result": {"trace": ["Cache hit"]},
+        }
+
+        _accumulate_usage_records([
+            {
+                "model": "gpt-4o-mini",
+                "operation": "quiz_generation",
+                "total_tokens": 300,
+                "estimated_cost_usd": 0.0003,
+            }
+        ])
+
+        record = mock_st.session_state["session_usage_records"][0]
+        assert record["learning_mode"] is None
+        assert record["learning_depth"] is None
+        assert record["progressive_streaming"] is None
+        assert record["cache_bypass"] is None
+        assert record["cache_hit"] is True

@@ -81,7 +81,7 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
     ),
     RAGAsEvalCase(
         topic="AI Agents and Tool Calling",
-        difficulty="intermediate",
+        difficulty="advanced",
         # Narrowed question to focus on tool calling mechanics — the previous
         # version asked broadly about "ReAct pattern for autonomous task
         # execution" which lowered context precision because the retriever
@@ -452,7 +452,8 @@ def format_ragas_report(report: RAGAsReport) -> str:
     ]
 
     for r in report.results:
-        lines.append(f"--- {r.topic} ({r.difficulty}) ---")
+        difficulty_label = (r.difficulty or "").capitalize() or "Unknown"
+        lines.append(f"--- {r.topic} ({difficulty_label}) ---")
         if r.error:
             lines.append(f"  ERROR: {r.error}")
         else:

@@ -34,6 +34,20 @@ st.markdown(
     section[data-testid="stSidebar"] button {
         text-align: left;
     }
+    /* Use a blue interactive accent so focus/selected states do not read as errors */
+    div[data-baseweb="input"] > div:focus-within,
+    div[data-baseweb="textarea"] > div:focus-within,
+    div[data-baseweb="select"] > div:focus-within {
+        border-color: #1565c0;
+        box-shadow: 0 0 0 1px #1565c0;
+    }
+    .stSlider [data-baseweb="slider"] [role="slider"] {
+        border-color: #1565c0;
+        box-shadow: 0 0 0 1px #1565c0;
+    }
+    .stSlider [data-baseweb="slider"] [role="progressbar"] {
+        background-color: #1565c0;
+    }
     /* Global readable max-width for all page content */
     .block-container {
         max-width: 52rem;
@@ -106,11 +120,20 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         _tracing = "On" if _s.langchain_tracing_v2 else "Off"
         st.caption(f"OpenAI: {_api_status}")
         st.caption(f"LangSmith: {_tracing}")
+    except Exception:
+        _s = None
+
+    if _s is not None:
+        try:
+            from src.kb.index_health import get_kb_index_health as _get_kb_index_health
+
+            _kb_status = _get_kb_index_health()["status_label"]
+        except Exception:
+            _kb_status = "Missing"
+        st.caption(f"KB Index: {_kb_status}")
         st.caption(f"Model: {_s.app_default_model}")
         st.caption("Input cost: $0.150000 / 1M tokens")
         st.caption("Output cost: $0.600000 / 1M tokens")
-    except Exception:
-        pass
 
     _usage = st.session_state.get("session_usage_records", [])
     _total_tokens = sum(r.get("total_tokens", 0) for r in _usage) if _usage else 0

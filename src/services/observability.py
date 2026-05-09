@@ -100,5 +100,5 @@ def format_tracing_status(status: TracingStatus) -> dict:
         "endpoint": status.endpoint,
         "has_api_key": status.has_api_key,
         "issues": status.issues,
-        "status_label": "✅ Active" if status.enabled else "❌ Disabled",
+        "status_label": "Active" if status.enabled else "Disabled",
     }
