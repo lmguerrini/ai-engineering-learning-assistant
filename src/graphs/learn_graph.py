@@ -6,6 +6,8 @@ The graph implements Agentic RAG:
     → generate study guide → quality check → persist → return
 """
 
+from collections.abc import Callable
+
 from loguru import logger
 from langgraph.graph import END, START, StateGraph
 
@@ -21,7 +23,7 @@ from src.graphs.learn_nodes import (
     validate_input,
 )
 from src.graphs.learn_state import LearningState
-from src.schemas import DifficultyLevel, ResponseStyle
+from src.schemas import DifficultyLevel, ResponseStyle, StudyGuide
 
 
 def _route_after_validation(state: LearningState) -> str:
@@ -86,6 +88,7 @@ def run_learn_workflow(
     difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE,
     style: ResponseStyle = ResponseStyle.DETAILED,
     force_regenerate: bool = False,
+    progress_callback: Callable[[StudyGuide], None] | None = None,
 ) -> LearningState:
     """Run the full Learn workflow and return the final state.
 
@@ -103,6 +106,8 @@ def run_learn_workflow(
             "trace": [],
             "token_usage": {},
         }
+        if progress_callback is not None:
+            initial_state["progress_callback"] = progress_callback
         result = app.invoke(
             initial_state,
             config={"run_name": f"learn_workflow:{topic}"},

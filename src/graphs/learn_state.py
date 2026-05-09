@@ -1,6 +1,6 @@
 """Typed state for the Learn graph workflow."""
 
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 
 from src.kb.loader import Document
 from src.schemas import DifficultyLevel, ResponseStyle, StudyGuide
@@ -31,6 +31,7 @@ class LearningState(TypedDict, total=False):
 
     # --- Generation ---
     study_guide: StudyGuide | None
+    progress_callback: Callable[[StudyGuide], None]
 
     # --- Quality / output ---
     quality_passed: bool

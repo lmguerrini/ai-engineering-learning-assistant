@@ -8,6 +8,45 @@ from src.schemas import DifficultyLevel, ResponseStyle
 from src.ui.shared import _LEARN_PATH_STABLE_TOPICS
 
 
+def _build_sources_text(docs: list[Document]) -> str:
+    """Render retrieved docs into a prompt-ready source block."""
+    sources_text = ""
+    for i, doc in enumerate(docs, 1):
+        title = doc.metadata.get("topic", doc.metadata.get("filename", f"source_{i}"))
+        sources_text += f"\n--- Source {i}: {title} ---\n{doc.content}\n"
+    return sources_text
+
+
+def _build_difficulty_instruction(difficulty: DifficultyLevel) -> str:
+    """Return prompt guidance tuned to the requested difficulty level."""
+    if difficulty == DifficultyLevel.ADVANCED:
+        return (
+            "\nAdvanced-level requirements:\n"
+            "- Discuss architecture tradeoffs and design decisions.\n"
+            "- Cover implementation concerns and edge cases.\n"
+            "- Include production considerations (scaling, error handling, monitoring).\n"
+            "- Address observability and testing where relevant.\n"
+            "- Mention security or reliability notes when applicable.\n"
+            "- Assume the reader already knows the basics.\n"
+        )
+    if difficulty == DifficultyLevel.BEGINNER:
+        return (
+            "\nBeginner-level requirements:\n"
+            "- Explain every concept from first principles.\n"
+            "- Avoid jargon without defining it first.\n"
+            "- Use simple analogies where helpful.\n"
+        )
+    return ""
+
+
+def _build_personalization_context(state: LearningState) -> str:
+    """Return the personalization section for prompts when memory exists."""
+    memory_context = _build_memory_context(state)
+    if not memory_context:
+        return ""
+    return f"\nPersonalization context:\n{memory_context}\n"
+
+
 def is_deep_study_learn_path(state: LearningState) -> bool:
     """Return True when the request is Deep Study + Learn Path.
 
@@ -75,10 +114,7 @@ def _build_prompt(state: LearningState) -> str:
     style = state.get("style", ResponseStyle.DETAILED)
     docs: list[Document] = state.get("retrieved_docs", [])
 
-    sources_text = ""
-    for i, doc in enumerate(docs, 1):
-        title = doc.metadata.get("topic", doc.metadata.get("filename", f"source_{i}"))
-        sources_text += f"\n--- Source {i}: {title} ---\n{doc.content}\n"
+    sources_text = _build_sources_text(docs)
 
     is_deep = style in (ResponseStyle.DETAILED, ResponseStyle.EXAMPLES_HEAVY)
     is_learn_path = ":" in topic and len(topic) > 60
@@ -183,24 +219,7 @@ def _build_prompt(state: LearningState) -> str:
             "Each key concept should be one sentence max."
         )
 
-    difficulty_instruction = ""
-    if difficulty == DifficultyLevel.ADVANCED:
-        difficulty_instruction = (
-            "\nAdvanced-level requirements:\n"
-            "- Discuss architecture tradeoffs and design decisions.\n"
-            "- Cover implementation concerns and edge cases.\n"
-            "- Include production considerations (scaling, error handling, monitoring).\n"
-            "- Address observability and testing where relevant.\n"
-            "- Mention security or reliability notes when applicable.\n"
-            "- Assume the reader already knows the basics.\n"
-        )
-    elif difficulty == DifficultyLevel.BEGINNER:
-        difficulty_instruction = (
-            "\nBeginner-level requirements:\n"
-            "- Explain every concept from first principles.\n"
-            "- Avoid jargon without defining it first.\n"
-            "- Use simple analogies where helpful.\n"
-        )
+    difficulty_instruction = _build_difficulty_instruction(difficulty)
 
     # Learn Path mode produces broader multi-topic curriculum;
     # Topic mode is focused on a single subject.
@@ -217,10 +236,7 @@ def _build_prompt(state: LearningState) -> str:
             "Stay focused on this single topic and cover it thoroughly.\n"
         )
 
-    memory_context = _build_memory_context(state)
-    personalization = ""
-    if memory_context:
-        personalization = f"\nPersonalization context:\n{memory_context}\n"
+    personalization = _build_personalization_context(state)
 
     return (
         f"You are an AI Engineering tutor. Generate a structured Learn Path "
@@ -261,34 +277,11 @@ def _build_deep_study_markdown_prompt(state: LearningState) -> str:
     difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
     docs: list[Document] = state.get("retrieved_docs", [])
 
-    sources_text = ""
-    for i, doc in enumerate(docs, 1):
-        title = doc.metadata.get("topic", doc.metadata.get("filename", f"source_{i}"))
-        sources_text += f"\n--- Source {i}: {title} ---\n{doc.content}\n"
+    sources_text = _build_sources_text(docs)
 
-    difficulty_instruction = ""
-    if difficulty == DifficultyLevel.ADVANCED:
-        difficulty_instruction = (
-            "\nAdvanced-level requirements:\n"
-            "- Discuss architecture tradeoffs and design decisions.\n"
-            "- Cover implementation concerns and edge cases.\n"
-            "- Include production considerations (scaling, error handling, monitoring).\n"
-            "- Address observability and testing where relevant.\n"
-            "- Mention security or reliability notes when applicable.\n"
-            "- Assume the reader already knows the basics.\n"
-        )
-    elif difficulty == DifficultyLevel.BEGINNER:
-        difficulty_instruction = (
-            "\nBeginner-level requirements:\n"
-            "- Explain every concept from first principles.\n"
-            "- Avoid jargon without defining it first.\n"
-            "- Use simple analogies where helpful.\n"
-        )
+    difficulty_instruction = _build_difficulty_instruction(difficulty)
 
-    memory_context = _build_memory_context(state)
-    personalization = ""
-    if memory_context:
-        personalization = f"\nPersonalization context:\n{memory_context}\n"
+    personalization = _build_personalization_context(state)
 
     level_label = difficulty.value.capitalize()
     stable_topics = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
@@ -458,4 +451,130 @@ def _build_deep_study_topic_markdown_prompt(state: LearningState) -> str:
         f"{sources_text}\n\n"
         f"OUTPUT FORMAT: Return ONLY Markdown text. Do NOT wrap in JSON.\n"
         f"Do NOT include any JSON structure. Just write the reference in Markdown."
+    )
+
+
+def _build_progressive_summary_prompt(state: LearningState) -> str:
+    """Build a small JSON prompt for the early Learn overview stage."""
+    topic = state.get("topic", "")
+    difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+    docs: list[Document] = state.get("retrieved_docs", [])
+    is_learn_path = ":" in topic and len(topic) > 60
+    sources_text = _build_sources_text(docs)
+    difficulty_instruction = _build_difficulty_instruction(difficulty)
+    personalization = _build_personalization_context(state)
+
+    if is_learn_path:
+        level_label = difficulty.value.capitalize()
+        stable_topics = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
+        topic_list = "\n".join(f"- {name}" for name in stable_topics)
+        mode_instruction = (
+            "This is a LEARN PATH request.\n"
+            "Write a concise curriculum overview that introduces the path as a whole.\n"
+            "For key_concepts, return ONLY these exact topic names in the same order:\n"
+            f"{topic_list}\n"
+            "Do not rename, merge, or annotate them."
+        )
+    else:
+        mode_instruction = (
+            "This is a single-topic Deep Study request.\n"
+            "Write a concise overview and extract 5-7 key concepts.\n"
+            "Each key concept may include a short explanation after a colon."
+        )
+
+    return (
+        f"You are an AI Engineering tutor preparing the EARLY OVERVIEW stage of a "
+        f"study guide.\n"
+        f"Topic: '{topic}'\n"
+        f"Level: {difficulty.value}\n\n"
+        f"{mode_instruction}\n"
+        f"{difficulty_instruction}\n"
+        f"{personalization}\n"
+        f"Use the following sources as reference material.\n"
+        f"Synthesize in your own words. Do not quote source text verbatim.\n"
+        f"{sources_text}\n\n"
+        f"Return ONLY valid JSON in this schema:\n"
+        f'{{\n'
+        f'  "summary": "2-4 sentence overview",\n'
+        f'  "key_concepts": ["Concept", "Concept: short explanation"]\n'
+        f'}}'
+    )
+
+
+def _build_progressive_topic_section_prompt(
+    state: LearningState,
+    summary: str,
+    key_concepts: list[str],
+    section_names: list[str],
+) -> str:
+    """Build a prompt for one bundle of Topic-mode detailed sections."""
+    topic = state.get("topic", "")
+    difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+    docs: list[Document] = state.get("retrieved_docs", [])
+    sources_text = _build_sources_text(docs)
+    difficulty_instruction = _build_difficulty_instruction(difficulty)
+    personalization = _build_personalization_context(state)
+    sections_text = "\n".join(f"- {name}" for name in section_names)
+    concepts_text = "\n".join(f"- {concept}" for concept in key_concepts)
+
+    return (
+        f"You are writing ONE PART of a production-grade engineering reference.\n"
+        f"Topic: '{topic}'\n"
+        f"Level: {difficulty.value}\n\n"
+        f"Existing overview:\n{summary}\n\n"
+        f"Key concepts already identified:\n{concepts_text}\n\n"
+        f"Write ONLY these sections, in this exact order, using ## headings:\n"
+        f"{sections_text}\n\n"
+        f"Rules:\n"
+        f"- Return ONLY Markdown.\n"
+        f"- Do NOT include an Overview section.\n"
+        f"- Do NOT include Sources, citations, or JSON.\n"
+        f"- Use substantial, technical explanations.\n"
+        f"- Keep content self-contained and non-repetitive.\n"
+        f"- Every ```python or ``` code block must contain meaningful code, not comments only.\n"
+        f"- If a section requests a comparison table or checklist, render it directly in Markdown.\n"
+        f"{difficulty_instruction}\n"
+        f"{personalization}\n"
+        f"Use these sources as grounding context:\n"
+        f"{sources_text}\n"
+    )
+
+
+def _build_progressive_learn_path_section_prompt(
+    state: LearningState,
+    summary: str,
+    topic_name: str,
+    section_number: int,
+) -> str:
+    """Build a prompt for one Learn Path topic section in Deep Study mode."""
+    difficulty = state.get("difficulty", DifficultyLevel.INTERMEDIATE)
+    docs: list[Document] = state.get("retrieved_docs", [])
+    sources_text = _build_sources_text(docs)
+    difficulty_instruction = _build_difficulty_instruction(difficulty)
+    personalization = _build_personalization_context(state)
+
+    return (
+        f"You are writing ONE major section of a technical curriculum handbook.\n"
+        f"Curriculum summary:\n{summary}\n\n"
+        f"Topic section: {section_number}. {topic_name}\n"
+        f"Level: {difficulty.value}\n\n"
+        f"Return ONLY Markdown with this exact top-level heading:\n"
+        f"## {section_number}. {topic_name}\n\n"
+        f"Inside that section, include these exact ### subsections in order:\n"
+        f"### Theory & Context\n"
+        f"### Architecture / Internal Design\n"
+        f"### Implementation Details\n"
+        f"### Practical Examples\n"
+        f"### Common Mistakes & Anti-Patterns\n"
+        f"### Review Checklist\n\n"
+        f"Rules:\n"
+        f"- Do not add any other ## headings.\n"
+        f"- Keep the section substantial and technically precise.\n"
+        f"- Use concrete code and configuration where relevant.\n"
+        f"- Every ```python or ``` code block must contain meaningful code, not comments only.\n"
+        f"- Do not include sources, citations, or JSON.\n"
+        f"{difficulty_instruction}\n"
+        f"{personalization}\n"
+        f"Use these sources as grounding context:\n"
+        f"{sources_text}\n"
     )

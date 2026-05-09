@@ -14,6 +14,9 @@ from src.config import get_settings
 from src.graphs.learn_prompts import (
     _build_memory_context,
     _build_prompt,
+    _build_progressive_learn_path_section_prompt,
+    _build_progressive_summary_prompt,
+    _build_progressive_topic_section_prompt,
     _build_deep_study_markdown_prompt,
     _build_deep_study_topic_markdown_prompt,
     is_deep_study_learn_path,
@@ -34,7 +37,24 @@ _MIN_SOURCES = 2
 # Minimum total characters across chunks to consider sources sufficient
 _MIN_CONTENT_CHARS = 200
 # Prompt version — bump to invalidate stale cached outputs
-_PROMPT_VERSION = "v15"
+_PROMPT_VERSION = "v16"
+_TOPIC_DEEP_STUDY_BUNDLES = [
+    [
+        "Conceptual Foundations",
+        "Architecture / Internal Design",
+        "Implementation Details",
+    ],
+    [
+        "Practical Examples",
+        "Production Considerations",
+        "Common Mistakes & Anti-Patterns",
+    ],
+    [
+        "When to Use / When Not to Use",
+        "Comparison Table",
+        "Review Checklist",
+    ],
+]
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +413,122 @@ def _extract_summary_from_markdown(markdown: str) -> str:
         elif paragraph:
             break  # end of first paragraph
     return " ".join(paragraph[:4]) if paragraph else "Deep Study curriculum reference."
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove outer fenced code blocks when present."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        return stripped.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    return stripped
+
+
+def _parse_json_payload(raw: str) -> dict[str, Any]:
+    """Parse a small JSON payload returned by the model."""
+    return json.loads(_strip_code_fences(raw))
+
+
+def _append_usage(
+    response: Any,
+    *,
+    model: str,
+    operation: str,
+    token_usage: dict[str, int],
+    usage_records: list[dict[str, Any]],
+) -> None:
+    """Accumulate token usage and append a usage record for one LLM call."""
+    usage = response.usage
+    if usage:
+        token_usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0) + (usage.prompt_tokens or 0)
+        token_usage["completion_tokens"] = token_usage.get("completion_tokens", 0) + (usage.completion_tokens or 0)
+        token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + (usage.total_tokens or 0)
+
+    usage_dict = {
+        "prompt_tokens": usage.prompt_tokens if usage else 0,
+        "completion_tokens": usage.completion_tokens if usage else 0,
+        "total_tokens": usage.total_tokens if usage else 0,
+    }
+    usage_records.append(build_usage_record(model, operation, usage_dict))
+
+
+def _call_llm_text(
+    client: Any,
+    *,
+    model: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    trace: list[str],
+    trace_label: str,
+    token_usage: dict[str, int],
+    usage_records: list[dict[str, Any]],
+    usage_operation: str,
+) -> str:
+    """Execute a single OpenAI completion call and accumulate usage."""
+    def _llm_call() -> Any:
+        return client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    response = with_retry(
+        callable=_llm_call,
+        max_attempts=2,
+        base_delay=1.0,
+        handled_exceptions=(Exception,),
+    )
+    raw = response.choices[0].message.content or ""
+    _append_usage(
+        response,
+        model=model,
+        operation=usage_operation,
+        token_usage=token_usage,
+        usage_records=usage_records,
+    )
+    trace.append(f"{trace_label}: LLM returned {len(raw)} chars")
+    return raw
+
+
+def _build_progressive_guide(
+    *,
+    topic: str,
+    difficulty: DifficultyLevel,
+    summary: str,
+    key_concepts: list[str],
+    detailed_notes: str,
+    sources: list[Source],
+) -> StudyGuide:
+    """Construct a StudyGuide object for partial-progress UI updates."""
+    return StudyGuide(
+        topic=topic,
+        difficulty=difficulty,
+        summary=summary,
+        key_concepts=key_concepts,
+        detailed_notes=detailed_notes,
+        sources=sources,
+    )
+
+
+def _emit_progress_update(state: LearningState, guide: StudyGuide, trace: list[str], stage: str) -> None:
+    """Invoke the optional UI progress callback with the latest partial guide."""
+    callback = state.get("progress_callback")
+    if not callback:
+        return
+    try:
+        callback(guide)
+        trace.append(f"generate_study_guide: progress emitted ({stage})")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Learn progress callback failed at stage '{}': {}", stage, exc)
+
+
+def _coerce_key_concepts(value: Any, fallback: list[str]) -> list[str]:
+    """Normalize model-returned key concept items into a clean list."""
+    if not isinstance(value, list):
+        return fallback
+    items = [str(item).strip() for item in value if str(item).strip()]
+    return items or fallback
 
 
 def _generate_deep_study_learn_path(state: LearningState) -> dict:
