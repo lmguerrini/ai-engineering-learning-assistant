@@ -94,14 +94,6 @@ for section_name in SECTIONS:
         st.session_state["active_section"] = section_name
         st.rerun()
 
-try:
-    from src.kb.index_health import get_kb_index_health as _get_kb_index_health
-
-    _kb_health = _get_kb_index_health()
-    st.sidebar.caption(f"KB Index: {_kb_health['status_label']}")
-except Exception:
-    st.sidebar.caption("KB Index: Missing")
-
 # Compact sidebar status
 st.sidebar.markdown("---")
 SECTIONS[st.session_state["active_section"]]()
@@ -119,6 +111,14 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         st.caption("Output cost: $0.600000 / 1M tokens")
     except Exception:
         pass
+
+    try:
+        from src.kb.index_health import get_kb_index_health as _get_kb_index_health
+
+        _kb_status = _get_kb_index_health()["status_label"]
+    except Exception:
+        _kb_status = "Missing"
+    st.caption(f"KB Index: {_kb_status}")
 
     _usage = st.session_state.get("session_usage_records", [])
     _total_tokens = sum(r.get("total_tokens", 0) for r in _usage) if _usage else 0

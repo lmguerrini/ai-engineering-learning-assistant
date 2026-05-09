@@ -442,6 +442,11 @@ def _display_kb_health_section() -> None:
 
     if health["status"] == "up_to_date":
         st.success("KB index is up to date.")
+    elif health["status"] == "metadata_missing":
+        st.info(
+            "Chroma collections already exist, but no KB health metadata baseline "
+            "was found yet. Rebuild once to enable freshness tracking."
+        )
     elif health["status"] == "outdated":
         st.warning("KB index is outdated. Rebuild recommended.")
     else:
@@ -469,7 +474,7 @@ def _display_kb_health_section() -> None:
             f"| Official Chunks / Sources | {official.get('chunk_count') if official.get('chunk_count') is not None else '—'} / {official.get('source_count') if official.get('source_count') is not None else '—'} |"
         )
 
-    if health["notes"]:
+    if health["notes"] and health["status"] != "metadata_missing":
         st.markdown("**Why a rebuild may be needed**")
         for note in health["notes"]:
             st.markdown(f"- {note}")
@@ -586,6 +591,7 @@ def render_advanced() -> None:
         "- Session-level token and cost tracking across Learn and Quiz.\n"
         "- Personalization signals from learning memory and feedback summaries."
     )
+    st.divider()
 
     # ── Observability ─────────────────────────────────────────────────────
     st.subheader("Observability")
@@ -623,20 +629,24 @@ def render_advanced() -> None:
             "chunk_overlap": settings.chunk_overlap,
             "api_key_configured": bool(settings.openai_api_key),
         })
+    st.divider()
 
     notice = st.session_state.pop("kb_rebuild_notice", None)
     if notice:
         st.success(notice)
 
     _display_kb_health_section()
+    st.divider()
 
     # ── Token and Cost Tracking ───────────────────────────────────────────
     st.subheader("Token and Cost Tracking")
     _display_latest_run_contexts(learn_result, quiz_result)
     _display_session_cost_summary()
+    st.divider()
 
     # ── Content Quality Evaluation (RAGAs) ─────────────────────────────
     _render_ragas_section()
+    st.divider()
 
     # ── Learning Signals ──────────────────────────────────────────────────
     st.subheader("Learning Signals")
@@ -680,6 +690,7 @@ def render_advanced() -> None:
             st.info(
                 "No feedback captured yet. Submit ratings from Learn or Quiz to populate this reviewer-facing feedback summary."
             )
+    st.divider()
 
     # ── Workflow Readiness ────────────────────────────────────────────────
     st.subheader("Workflow Readiness")

@@ -16,7 +16,7 @@ class TestDisplayKbHealthSection:
     @patch("src.ui.dashboard_page.st")
     @patch("src.kb.index_health.get_kb_index_health")
     @patch("src.config.get_settings")
-    def test_renders_health_summary_and_warning(self, mock_settings, mock_health, mock_st):
+    def test_renders_health_summary_and_manual_rebuild_warning(self, mock_settings, mock_health, mock_st):
         from src.ui.dashboard_page import _display_kb_health_section
 
         _setup_mock_st(mock_st)
@@ -64,7 +64,7 @@ class TestDisplayKbHealthSection:
         mock_settings.return_value = SimpleNamespace(openai_api_key="test-key")
         mock_health.return_value = {
             "status": "outdated",
-            "status_label": "Outdated",
+            "status_label": "Rebuild recommended",
             "reindex_required": True,
             "raw_docs_count": 10,
             "official_docs_count": 12,
@@ -84,3 +84,36 @@ class TestDisplayKbHealthSection:
         mock_rebuild.assert_called_once()
         assert mock_st.session_state["kb_rebuild_notice"] == "KB index rebuilt successfully."
         mock_st.rerun.assert_called_once()
+
+    @patch("src.ui.dashboard_page.st")
+    @patch("src.kb.index_health.get_kb_index_health")
+    @patch("src.config.get_settings")
+    def test_metadata_missing_shows_explanatory_copy(self, mock_settings, mock_health, mock_st):
+        from src.ui.dashboard_page import _display_kb_health_section
+
+        _setup_mock_st(mock_st)
+        mock_settings.return_value = SimpleNamespace(openai_api_key="test-key")
+        mock_health.return_value = {
+            "status": "metadata_missing",
+            "status_label": "Rebuild recommended",
+            "reindex_required": True,
+            "raw_docs_count": 10,
+            "official_docs_count": 12,
+            "embedding_model": "text-embedding-3-small",
+            "last_rebuild_at": None,
+            "collections": {
+                "curated": {"chunk_count": 120, "source_count": 10},
+                "official": {"chunk_count": 85, "source_count": 12},
+            },
+            "notes": [
+                "Chroma collections already exist, but no KB health metadata baseline was found yet. Rebuild once to enable freshness tracking."
+            ],
+        }
+        mock_st.button.return_value = False
+        mock_st.session_state = {}
+
+        _display_kb_health_section()
+
+        mock_st.info.assert_called()
+        info_calls = [str(call) for call in mock_st.info.call_args_list]
+        assert any("no kb health metadata baseline" in call.lower() for call in info_calls)

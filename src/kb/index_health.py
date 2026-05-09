@@ -162,8 +162,8 @@ def _resolve_collection_counts(
         "available": bool(stats.get("available")),
         "chunk_count": (
             stats.get("chunk_count")
-            if stats.get("chunk_count") is not None
-            else metadata_stats.get("chunk_count")
+            if stats.get("available") and stats.get("chunk_count") is not None
+            else None
         ),
         "source_count": (
             stats.get("source_count")
@@ -205,17 +205,24 @@ def get_kb_index_health(
     notes: list[str] = []
     status = "up_to_date"
 
-    if metadata is None:
-        status = "missing"
-        notes.append("No saved KB index metadata found.")
+    collections_available = curated_live["available"] and official_live["available"]
+    chunks_available = (
+        curated_live["chunk_count"] not in (None, 0)
+        and official_live["chunk_count"] not in (None, 0)
+    )
 
-    if not curated["available"] or not official["available"]:
+    if not collections_available:
         status = "missing"
         notes.append("One or more KB collections are missing.")
-
-    if curated["chunk_count"] in (None, 0) or official["chunk_count"] in (None, 0):
+    elif not chunks_available:
         status = "missing"
         notes.append("One or more KB collections have no indexed chunks.")
+    elif metadata is None:
+        status = "metadata_missing"
+        notes.append(
+            "Chroma collections already exist, but no KB health metadata baseline was "
+            "found yet. Rebuild once to enable freshness tracking."
+        )
 
     if metadata is not None and metadata.get("snapshot") != snapshot and status != "missing":
         status = "outdated"
@@ -243,7 +250,8 @@ def get_kb_index_health(
 
     status_label = {
         "up_to_date": "Up to date",
-        "outdated": "Outdated",
+        "outdated": "Rebuild recommended",
+        "metadata_missing": "Rebuild recommended",
         "missing": "Missing",
     }[status]
 

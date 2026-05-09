@@ -949,6 +949,9 @@ class TestSidebarStatus:
         with open("app.py") as f:
             source = f.read()
         assert "KB Index:" in source
+        runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
+        kb_status = 'st.caption(f"KB Index: {_kb_status}")'
+        assert source.index(runtime_info) < source.index(kb_status)
 
     def test_runtime_info_renders_after_active_page(self):
         with open("app.py") as f:
@@ -1447,6 +1450,11 @@ class TestDashboardStructure:
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         assert '"Rebuild KB Index"' in source
+
+    def test_dashboard_uses_dividers_between_major_sections(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert source.count("st.divider()") >= 6
 
 
 class TestUsageRecordAccumulation:

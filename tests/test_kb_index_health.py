@@ -59,7 +59,7 @@ class TestBuildSourceSnapshot:
 class TestGetKbIndexHealth:
     @patch("src.kb.index_health._get_collection_stats")
     @patch("src.kb.index_health.get_settings")
-    def test_missing_without_saved_metadata(self, mock_settings, mock_stats, tmp_path: Path):
+    def test_missing_when_collections_absent(self, mock_settings, mock_stats, tmp_path: Path):
         settings = _make_settings(tmp_path)
         _write_docs(settings)
         mock_settings.return_value = settings
@@ -75,6 +75,29 @@ class TestGetKbIndexHealth:
         assert health["reindex_required"] is True
         assert health["raw_docs_count"] == 1
         assert health["official_docs_count"] == 1
+
+    @patch("src.kb.index_health._get_collection_stats")
+    @patch("src.kb.index_health.get_settings")
+    def test_metadata_missing_when_collections_exist_without_baseline(
+        self,
+        mock_settings,
+        mock_stats,
+        tmp_path: Path,
+    ):
+        settings = _make_settings(tmp_path)
+        _write_docs(settings)
+        mock_settings.return_value = settings
+        mock_stats.side_effect = [
+            {"name": DEFAULT_COLLECTION, "available": True, "chunk_count": 3, "source_count": 1},
+            {"name": settings.official_docs_collection, "available": True, "chunk_count": 4, "source_count": 1},
+        ]
+
+        health = get_kb_index_health()
+
+        assert health["status"] == "metadata_missing"
+        assert health["status_label"] == "Rebuild recommended"
+        assert health["reindex_required"] is True
+        assert any("no kb health metadata baseline" in note.lower() for note in health["notes"])
 
     @patch("src.kb.index_health._get_collection_stats")
     @patch("src.kb.index_health.get_settings")
@@ -142,6 +165,7 @@ class TestGetKbIndexHealth:
         health = get_kb_index_health()
 
         assert health["status"] == "outdated"
+        assert health["status_label"] == "Rebuild recommended"
         assert health["reindex_required"] is True
         assert any("source files changed" in note.lower() for note in health["notes"])
 
