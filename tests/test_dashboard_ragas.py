@@ -119,8 +119,15 @@ class TestDashboardSnapshotHelpers:
     def test_ragas_snapshot_value_not_run_without_report(self):
         assert _ragas_snapshot_value(None) == "Not run"
 
-    def test_metric_status_label_marks_answer_correctness_diagnostic(self):
-        assert _metric_status_label("answer_correctness", 0.1) == "Diagnostic only"
+    def test_metric_status_label_uses_normal_status_dot_for_answer_correctness(self):
+        assert _metric_status_label("answer_correctness", 0.1) == "🔴"
+
+    @patch("src.ui.dashboard_page.st")
+    def test_trace_snapshot_value_uses_dash_when_no_run_available(self, mock_st):
+        from src.ui.dashboard_page import _trace_snapshot_value
+
+        mock_st.session_state = {}
+        assert _trace_snapshot_value({}, "last_learn_trace") == "—"
 
     def test_ragas_case_label_capitalizes_difficulty(self):
         case = MagicMock(topic="AI Agents and Tool Calling", difficulty="advanced")
@@ -240,7 +247,7 @@ class TestDisplayRagasReport:
         assert any("borderline yellow" in c.lower() for c in caption_calls)
 
     @patch("src.ui.dashboard_page.st")
-    def test_display_treats_answer_correctness_as_diagnostic_only_in_case_table(self, mock_st):
+    def test_display_keeps_answer_correctness_diagnostic_role_with_normal_status_dot(self, mock_st):
         from src.ui.dashboard_page import _display_ragas_report
 
         self._setup_mock_st(mock_st)
@@ -249,7 +256,13 @@ class TestDisplayRagasReport:
 
         markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
         table_calls = [text for text in markdown_calls if "| Metric | Score | Status | Role |" in text]
-        assert any("| Answer Correctness |" in text and "Diagnostic only" in text for text in table_calls)
+        assert any(
+            "| Answer Correctness |" in text
+            and "| Diagnostic |" in text
+            and "Diagnostic only" not in text
+            and ("🟡" in text or "🔴" in text or "🟢" in text)
+            for text in table_calls
+        )
 
     @patch("src.ui.dashboard_page.st")
     def test_display_shows_error_case(self, mock_st):

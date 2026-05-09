@@ -98,8 +98,6 @@ def _format_ragas_case_label(result) -> str:
 
 def _metric_status_label(field_name: str, value: float | None) -> str:
     """Return the dashboard status label for one RAGAs metric row."""
-    if field_name == "answer_correctness":
-        return "Diagnostic only"
     return _metric_color(value)
 
 
@@ -240,7 +238,7 @@ def _ragas_snapshot_value(report) -> str:
 def _trace_snapshot_value(result: dict, trace_key: str) -> str:
     """Return a short workflow readiness label from stored trace state."""
     trace = result.get("trace") or st.session_state.get(trace_key, [])
-    return "Ready" if trace or result else "No run yet"
+    return "Ready" if trace or result else "—"
 
 
 def _display_workflow_trace_panel(
