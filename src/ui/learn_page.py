@@ -53,11 +53,13 @@ def _show_cached_learn_result() -> None:
         return
     depth = st.session_state.get("last_learn_depth", "Summary")
     mode = st.session_state.get("last_learn_mode", "Topic")
-    _display_learn_result(result, depth=depth, mode=mode, stream=False)
+    feedback_topic = st.session_state.get("last_learn_topic", result.get("topic", ""))
+    _display_learn_result(result, depth=depth, mode=mode, stream=False, feedback_topic=feedback_topic)
 
 
 def _display_learn_result(result: dict, *, depth: str, mode: str,
-                          stream: bool = False, render_guide: bool = True) -> None:
+                          stream: bool = False, render_guide: bool = True,
+                          feedback_topic: str = "") -> None:
     """Display a Learn workflow result with optional UI-only streaming replay."""
     error = result.get("error")
     if error:
@@ -66,13 +68,22 @@ def _display_learn_result(result: dict, *, depth: str, mode: str,
     guide = result.get("study_guide")
     if guide and render_guide:
         _display_study_guide(guide, depth=depth, mode=mode, stream=stream)
-    _display_learn_result_extras(result)
+    _display_learn_result_extras(result, feedback_topic=feedback_topic or result.get("topic", ""))
 
 
-def _display_learn_result_extras(result: dict) -> None:
+def _display_learn_result_extras(result: dict, *, feedback_topic: str) -> None:
     """Render non-guide Learn result sections."""
+    st.markdown("---")
+    st.markdown("#### Personalization")
     _display_memory_section(result)
+
+    st.markdown("---")
+    st.markdown("#### Workflow Trace")
     _display_debug_trace(result, "Learn Workflow Trace")
+
+    st.markdown("---")
+    st.markdown("#### Feedback")
+    _display_feedback_widget("learn", feedback_topic, expanded=True)
 
 
 def _has_cache_hit(result: dict) -> bool:
@@ -567,6 +578,7 @@ def render_learn() -> None:
                 depth=depth_label,
                 mode=learning_mode,
                 render_guide=False,
+                feedback_topic=topic,
             )
             displayed_result_this_run = True
 
@@ -589,5 +601,3 @@ def render_learn() -> None:
     # Cached results and revisits stay instant and render from session state.
     if result and not displayed_result_this_run:
         _show_cached_learn_result()
-
-    _display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))

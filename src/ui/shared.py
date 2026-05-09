@@ -257,7 +257,7 @@ def _display_memory_section(result: dict) -> None:
         "to build personalized learning memory."
     )
 
-    with st.expander("Memory Profile"):
+    with st.expander("Memory Profile", expanded=False):
         if not mem["loaded"]:
             st.info(_EMPTY_MEMORY_MSG)
             return
@@ -447,7 +447,12 @@ def _display_debug_trace(result: dict, label: str = "Learn Workflow Trace") -> N
                 st.json(tokens)
 
 
-def _display_feedback_widget(context_type: str, topic: str) -> None:
+def _display_feedback_widget(
+    context_type: str,
+    topic: str,
+    *,
+    expanded: bool = False,
+) -> None:
     """Display a rating + comment feedback form for learn or quiz."""
     if not topic:
         return
@@ -459,7 +464,7 @@ def _display_feedback_widget(context_type: str, topic: str) -> None:
         st.success("Feedback saved. Thank you!")
         return
 
-    with st.expander(f"Rate this {context_type} experience"):
+    with st.expander(f"Rate this {context_type} experience", expanded=expanded):
         rating = st.slider(
             "Rating", min_value=1, max_value=5, value=4, key=f"{key_prefix}_rating",
         )

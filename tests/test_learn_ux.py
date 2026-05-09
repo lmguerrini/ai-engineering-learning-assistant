@@ -780,12 +780,14 @@ class TestLearnStreamingHelpers:
 
         with patch("src.ui.learn_page._display_study_guide") as display_guide, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
-             patch("src.ui.learn_page._display_debug_trace") as display_trace:
+             patch("src.ui.learn_page._display_debug_trace") as display_trace, \
+             patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
             _display_learn_result(
                 result,
                 depth="Deep Study",
                 mode="Topic",
                 stream=True,
+                feedback_topic="AI Agents",
             )
 
         display_guide.assert_called_once_with(
@@ -796,6 +798,28 @@ class TestLearnStreamingHelpers:
         )
         display_memory.assert_called_once_with(result)
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
+        display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
+
+    def test_display_learn_result_extras_uses_distinct_section_headings(self):
+        from unittest.mock import patch
+
+        from src.ui.learn_page import _display_learn_result_extras
+
+        result = {"trace": []}
+
+        with patch("src.ui.learn_page.st.markdown") as markdown, \
+             patch("src.ui.learn_page._display_memory_section") as display_memory, \
+             patch("src.ui.learn_page._display_debug_trace") as display_trace, \
+             patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
+            _display_learn_result_extras(result, feedback_topic="AI Agents")
+
+        headings = [call.args[0] for call in markdown.call_args_list]
+        assert "#### Personalization" in headings
+        assert "#### Workflow Trace" in headings
+        assert "#### Feedback" in headings
+        display_memory.assert_called_once_with(result)
+        display_trace.assert_called_once_with(result, "Learn Workflow Trace")
+        display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
 
 
 class TestLearnProgressiveStreamingToggle:
@@ -816,6 +840,31 @@ class TestLearnProgressiveStreamingToggle:
         with open("src/ui/learn_page.py") as f:
             source = f.read()
         assert "progressive_streaming=use_progressive_streaming" in source
+
+
+class TestLearnResultLayoutPolish:
+    """Learn result layout should use distinct semantic sections."""
+
+    def test_learn_page_feedback_is_rendered_with_result_extras(self):
+        with open("src/ui/learn_page.py") as f:
+            source = f.read()
+        assert '_display_feedback_widget("learn", feedback_topic, expanded=True)' in source
+        assert '_display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))' not in source
+
+    def test_shared_feedback_widget_supports_expanded_flag(self):
+        import inspect
+        from src.ui.shared import _display_feedback_widget
+
+        source = inspect.getsource(_display_feedback_widget)
+        assert "expanded: bool = False" in source
+        assert "st.expander(f\"Rate this {context_type} experience\", expanded=expanded)" in source
+
+    def test_memory_profile_expander_stays_collapsed_by_default(self):
+        import inspect
+        from src.ui.shared import _display_memory_section
+
+        source = inspect.getsource(_display_memory_section)
+        assert 'st.expander("Memory Profile", expanded=False)' in source
 
 
 class TestQuizUiCopy:
