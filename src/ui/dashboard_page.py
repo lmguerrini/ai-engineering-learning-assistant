@@ -424,6 +424,76 @@ def _display_ragas_report(report) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Knowledge Base Health
+# ---------------------------------------------------------------------------
+
+def _display_kb_health_section() -> None:
+    """Render KB / Chroma freshness and manual rebuild controls."""
+    from src.config import get_settings
+    from src.kb.index_health import get_kb_index_health, rebuild_kb_index
+
+    settings = get_settings()
+    health = get_kb_index_health()
+
+    st.subheader("Knowledge Base Health")
+    st.caption(
+        "Tracks whether the local Chroma index matches the current curated and official markdown files."
+    )
+
+    if health["status"] == "up_to_date":
+        st.success("KB index is up to date.")
+    elif health["status"] == "outdated":
+        st.warning("KB index is outdated. Rebuild recommended.")
+    else:
+        st.warning("KB index is missing or incomplete. Rebuild required.")
+
+    summary_left, summary_right = st.columns(2)
+    with summary_left:
+        st.markdown(
+            f"| Field | Value |\n"
+            f"|---|---|\n"
+            f"| Index Status | {health['status_label']} |\n"
+            f"| Reindex Needed | {'Yes' if health['reindex_required'] else 'No'} |\n"
+            f"| Embedding Model | {health['embedding_model']} |\n"
+            f"| Last Rebuild | {health.get('last_rebuild_at') or '—'} |"
+        )
+    with summary_right:
+        curated = health["collections"]["curated"]
+        official = health["collections"]["official"]
+        st.markdown(
+            f"| Field | Value |\n"
+            f"|---|---|\n"
+            f"| Raw Docs | {health['raw_docs_count']} |\n"
+            f"| Official Docs | {health['official_docs_count']} |\n"
+            f"| Curated Chunks / Sources | {curated.get('chunk_count') if curated.get('chunk_count') is not None else '—'} / {curated.get('source_count') if curated.get('source_count') is not None else '—'} |\n"
+            f"| Official Chunks / Sources | {official.get('chunk_count') if official.get('chunk_count') is not None else '—'} / {official.get('source_count') if official.get('source_count') is not None else '—'} |"
+        )
+
+    if health["notes"]:
+        st.markdown("**Why a rebuild may be needed**")
+        for note in health["notes"]:
+            st.markdown(f"- {note}")
+
+    st.warning(
+        "Rebuilding the KB index may take time and may call the embedding model. "
+        "The app will not rebuild automatically."
+    )
+    rebuild_disabled = not bool(settings.openai_api_key)
+    if rebuild_disabled:
+        st.caption("OpenAI API key required for KB rebuild.")
+
+    if st.button(
+        "Rebuild KB Index",
+        key="btn_rebuild_kb_index",
+        disabled=rebuild_disabled,
+    ):
+        with st.spinner("Rebuilding KB index..."):
+            rebuild_kb_index()
+        st.session_state["kb_rebuild_notice"] = "KB index rebuilt successfully."
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Dashboard (formerly Advanced / Debug)
 # ---------------------------------------------------------------------------
 
@@ -553,6 +623,12 @@ def render_advanced() -> None:
             "chunk_overlap": settings.chunk_overlap,
             "api_key_configured": bool(settings.openai_api_key),
         })
+
+    notice = st.session_state.pop("kb_rebuild_notice", None)
+    if notice:
+        st.success(notice)
+
+    _display_kb_health_section()
 
     # ── Token and Cost Tracking ───────────────────────────────────────────
     st.subheader("Token and Cost Tracking")

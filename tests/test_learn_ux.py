@@ -945,6 +945,11 @@ class TestSidebarStatus:
             source = f.read()
         assert "LangSmith:" in source
 
+    def test_sidebar_has_kb_index_status(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "KB Index:" in source
+
     def test_runtime_info_renders_after_active_page(self):
         with open("app.py") as f:
             source = f.read()
@@ -1397,6 +1402,7 @@ class TestDashboardStructure:
         # Dashboard should use st.subheader for main sections
         assert "st.subheader(\"Review Snapshot\")" in source
         assert "st.subheader(\"Observability\")" in source
+        assert "st.subheader(\"Knowledge Base Health\")" in source
         assert "st.subheader(\"Token and Cost Tracking\")" in source
         assert "st.subheader(\"Evaluation Readiness (RAGAs)\")" in source
         assert "st.subheader(\"Learning Signals\")" in source
@@ -1436,6 +1442,11 @@ class TestDashboardStructure:
             source = f.read()
         assert 'return "Cached"' in source
         assert '"Loaded" if mem["loaded"] else "Empty"' in source
+
+    def test_dashboard_has_kb_rebuild_button(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '"Rebuild KB Index"' in source
 
 
 class TestUsageRecordAccumulation:

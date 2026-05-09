@@ -60,6 +60,41 @@ def create_collection(
     return collection
 
 
+def get_collection(
+    name: str = DEFAULT_COLLECTION,
+    client: chromadb.ClientAPI | None = None,
+) -> Collection | None:
+    """Return an existing Chroma collection without creating it."""
+    if client is None:
+        client = get_chroma_client()
+
+    try:
+        collection = client.get_collection(name=name)
+    except Exception as exc:
+        logger.debug("Collection '{}' not available: {}", name, exc)
+        return None
+
+    logger.debug("Collection '{}' loaded ({} documents)", name, collection.count())
+    return collection
+
+
+def delete_collection(
+    name: str = DEFAULT_COLLECTION,
+    client: chromadb.ClientAPI | None = None,
+) -> bool:
+    """Delete a Chroma collection when it exists."""
+    if client is None:
+        client = get_chroma_client()
+
+    collection = get_collection(name=name, client=client)
+    if collection is None:
+        return False
+
+    client.delete_collection(name=name)
+    logger.info("Deleted collection '{}'", name)
+    return True
+
+
 def add_documents(
     documents: list[Document],
     collection: Collection | None = None,
