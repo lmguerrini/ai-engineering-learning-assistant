@@ -1,7 +1,7 @@
 # Chroma Vector Store
 
 - **Official source**: https://docs.trychroma.com/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `chromadb>=0.5`
 
@@ -300,3 +300,17 @@ results = collection.query(query_texts=["What is RAG?"], n_results=5)
 - `src/kb/ingestion.py`: Batch document addition to Chroma collections.
 - `src/kb/retrieval.py`: Query interface over the Chroma vector store.
 - `src/config.py`: `chroma_persist_dir` setting for persistence path.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.trychroma.com/docs/overview/introduction
+
+```
+Skip to main content Chroma Docs home page Search... ⌘ K Ask AI 27k 11k 29k Dashboard Dashboard Search... Navigation Overview Introduction Docs Chroma Cloud Guides Integrations Reference Overview Introduction Getting Started Run Chroma Chroma Clients Client-Server Mode Collections Manage Collections Add Data Update Data Delete Data Configure Collections Querying Collections Query and Get Metadata Filtering Full Text Search Embeddings Embedding Functions Multimodal Embeddings CLI Installing the CLI Run a Chroma Server Data Management Cloud Other Other Open Source Migration Troubleshooting Overview Introduction Copy page Chroma is the open-source data infrastructure for AI. It comes with everything you need to get started built-in. Copy page Documentation Index Fetch the complete documentation index at: https://docs.trychroma.com/llms.txt Use this file to discover all available pages be...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

@@ -1,7 +1,7 @@
 # LangChain Core & Tools
 
 - **Official source**: https://docs.langchain.com/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langchain-core>=0.3`, `langchain>=0.3`
 
@@ -268,3 +268,17 @@ result = chain.invoke(
 - `src/kb/chunker.py`: Text splitting inspired by LangChain splitter patterns.
 - `src/kb/loader.py`: Document loading following LangChain document model.
 - `src/schemas.py`: Pydantic models for structured LLM output parsing.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.langchain.com/
+
+```
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Home Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation Documentation Index Fetch the complete documentation index at: https://docs.langchain.com/llms.txt Use this file to discover all available pages before exploring further. Documentation LangChain is the platform for agent engineering. AI teams at Clay, Rippling, Cloudflare, Workday, and more trust LangChain’s products to engineer reliable agents. LangSmith LangSmith is a platform that helps AI teams use live production data for continuous testing and improvement. LangSmith provides: Observability See exactly how your agent thinks and acts with detailed tracing and aggregate trend metrics. Learn more Evaluation Test and score agent behavior on production data or offlin...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

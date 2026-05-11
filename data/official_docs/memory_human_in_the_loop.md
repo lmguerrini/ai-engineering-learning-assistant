@@ -1,7 +1,7 @@
 # Long-Term Memory & Human-in-the-Loop
 
 - **Official source**: https://langchain-ai.github.io/langgraph/concepts/memory/, https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
-- **Last refreshed**: 2025-05-08
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`, `langchain>=0.2`
 
@@ -179,3 +179,23 @@ app.invoke({"human_approved": True}, config)
 - Using memory as a replacement for proper retrieval (RAG).
 - Not testing workflows with empty/corrupted memory states.
 - Implementing HITL without timeout or escalation paths.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://langchain-ai.github.io/langgraph/concepts/memory/
+
+```
+Redirecting...
+```
+
+### https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
+
+```
+Redirecting...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

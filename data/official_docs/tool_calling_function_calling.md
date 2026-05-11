@@ -1,7 +1,7 @@
 # Tool Calling & Function Calling
 
 - **Official source**: https://platform.openai.com/docs/guides/function-calling, https://python.langchain.com/docs/concepts/tool_calling/
-- **Last refreshed**: 2025-05-08
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `openai>=1.0`, `langchain-core>=0.2`
 
@@ -210,3 +210,23 @@ Choose **structured output** when you need a typed response without side effects
 - Not testing tools independently before integrating with agents.
 - Allowing tools to mutate shared state without synchronization.
 - Ignoring tool call latency in agent timeout budgets.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://developers.openai.com/api/docs/guides/function-calling
+
+```
+Home API Docs Guides and concepts for the OpenAI API API reference Endpoints, parameters, and responses Codex Docs Guides, concepts, and product docs for Codex Use cases Example workflows and tasks teams hand to Codex ChatGPT Apps SDK Build apps to extend ChatGPT Commerce Build commerce flows in ChatGPT Ads Publish and measure ads in ChatGPT Resources Showcase Demo apps to get inspired Blog Learnings and experiences from developers Cookbook Notebook examples for building with OpenAI models Learn Docs, videos, and demo apps for building with OpenAI Community Programs, meetups, and support for builders Start searching API Dashboard Search the API docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation API API Reference Codex ChatGPT Resources Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overvi...
+```
+
+### https://docs.langchain.com/oss/python/langchain/overview
+
+```
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Open source Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangChain overview Deep Agents LangChain LangGraph Integrations Learn Reference Contribute Python Overview Get started Install Quickstart Changelog Philosophy Core components Agents Models Messages Tools Short-term memory Streaming Structured output Middleware Overview Prebuilt middleware Custom middleware Frontend Overview Patterns Integrations Advanced usage Guardrails Runtime Context engineering Model Context Protocol (MCP) Human-in-the-loop Multi-agent Retrieval Long-term memory Agent development LangSmith Studio Test Agent Chat UI Deploy with LangSmith Deployment Observability On this page Create an agent Core benefits LangChain overview Copy page LangCha...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

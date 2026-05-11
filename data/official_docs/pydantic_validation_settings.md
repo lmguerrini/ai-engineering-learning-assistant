@@ -1,7 +1,7 @@
 # Pydantic Validation & Settings
 
 - **Official source**: https://docs.pydantic.dev/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `pydantic>=2.0`, `pydantic-settings>=2.0`
 
@@ -303,3 +303,17 @@ class QuizResult(BaseModel):
 - `src/schemas.py`: `StudyGuide`, `QuizQuestion`, `QuizResult`, `UserProgress` models.
 - `src/kb/loader.py`: `Document` model for loaded documents.
 - `src/graphs/learn_nodes.py`: Parses LLM JSON output into `StudyGuide` model.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://pydantic.dev/docs/
+
+```
+Skip to content Pydantic Docs Pydantic Validation Pydantic AI Pydantic Logfire Search Ctrl K Pydantic Docs Documentation for the Pydantic stack. Build and validate data with Pydantic Validation, create agents with Pydantic AI, and observe and improve agents in production with Pydantic Logfire. Pydantic Validation Data validation using Python type annotations. Parse and validate complex data, generate JSON schemas, and ensure data integrity. Pydantic AI Agent framework for building production AI applications. Type-safe, structured outputs, tool use, multi-agent orchestration with native Logfire integration. Pydantic Logfire General and AI observability to monitor LLM calls, agent behavior, costs, and service performance across your entire stack. © Pydantic Services Inc. 2025 to present
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

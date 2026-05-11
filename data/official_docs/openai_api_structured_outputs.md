@@ -1,7 +1,7 @@
 # OpenAI API & Structured Outputs
 
 - **Official source**: https://platform.openai.com/docs/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: API `v1`, Python SDK `openai>=1.0`
 
@@ -273,3 +273,17 @@ def count_tokens(messages: list[dict], model: str = "gpt-4o-mini") -> int:
 - `src/kb/embeddings.py`: Uses embeddings API for document vectorization.
 - `src/services/cost_tracker.py`: Tracks token usage and estimates cost.
 - `src/services/retry.py`: Implements retry logic for API calls.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://developers.openai.com/api/docs
+
+```
+Home API Docs Guides and concepts for the OpenAI API API reference Endpoints, parameters, and responses Codex Docs Guides, concepts, and product docs for Codex Use cases Example workflows and tasks teams hand to Codex ChatGPT Apps SDK Build apps to extend ChatGPT Commerce Build commerce flows in ChatGPT Ads Publish and measure ads in ChatGPT Resources Showcase Demo apps to get inspired Blog Learnings and experiences from developers Cookbook Notebook examples for building with OpenAI models Learn Docs, videos, and demo apps for building with OpenAI Community Programs, meetups, and support for builders Start searching API Dashboard Search the API docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation API API Reference Codex ChatGPT Resources Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overvi...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

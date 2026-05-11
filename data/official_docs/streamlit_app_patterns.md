@@ -1,7 +1,7 @@
 # Streamlit App Patterns
 
 - **Official source**: https://docs.streamlit.io/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `streamlit>=1.30`
 
@@ -307,3 +307,17 @@ gatherUsageStats = false
 - `app.py`: Streamlit entrypoint with sidebar navigation.
 - `src/ui/pages.py`: Page rendering functions for Learn, Quiz, Progress, Advanced.
 - `src/ui/display_helpers.py`: Reusable display formatting helpers.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.streamlit.io/
+
+```
+Documentation search Search rocket_launch Get started Installation add Fundamentals add First steps add code Develop Concepts add API reference add Tutorials add Quick reference add web_asset Deploy Concepts add Streamlit Community Cloud add Snowflake Other platforms add school Knowledge base FAQ Installing dependencies Deployment issues Streamlit documentation Streamlit is an open-source Python framework for data scientists and AI/ML engineers to deliver dynamic data apps with only a few lines of code. Build and deploy powerful data apps in minutes. Let's get started! install_desktop Setup and installation Get set up to start working with Streamlit. dvr API reference Learn about our APIs, with actionable explanations of specific functions and features. grid_view App gallery Try out awesome apps created by our users, and curated from our forums or Twitter. How to use our docs rocket_l...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

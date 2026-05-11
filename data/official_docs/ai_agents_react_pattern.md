@@ -1,7 +1,7 @@
 # AI Agents & ReAct Pattern
 
 - **Official source**: https://arxiv.org/abs/2210.03629, https://python.langchain.com/docs/concepts/agents/
-- **Last refreshed**: 2025-05-08
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langchain>=0.2`, `langgraph>=0.2`
 
@@ -208,3 +208,23 @@ Common debugging workflow:
 - LangChain Agents documentation
 - LangGraph prebuilt agent patterns
 - Shinn et al., "Reflexion: Language Agents with Verbal Reinforcement Learning" (2023)
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://arxiv.org/abs/2210.03629
+
+```
+Skip to main content Learn about arXiv becoming an independent nonprofit. We gratefully acknowledge support from the Simons Foundation, member institutions, and all contributors. Donate > cs > arXiv:2210.03629 Help | Advanced Search All fields Title Author Abstract Comments Journal reference ACM classification MSC classification Report number arXiv identifier DOI ORCID arXiv author ID Help pages Full text Search GO quick links Login Help Pages About Computer Science > Computation and Language arXiv:2210.03629 (cs) [Submitted on 6 Oct 2022 ( v1 ), last revised 10 Mar 2023 (this version, v3)] Title: ReAct: Synergizing Reasoning and Acting in Language Models Authors: Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao View a PDF of the paper titled ReAct: Synergizing Reasoning and Acting in Language Models, by Shunyu Yao and 6 other authors View PDF Abs...
+```
+
+### https://docs.langchain.com/oss/python/langchain/overview
+
+```
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Open source Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangChain overview Deep Agents LangChain LangGraph Integrations Learn Reference Contribute Python Overview Get started Install Quickstart Changelog Philosophy Core components Agents Models Messages Tools Short-term memory Streaming Structured output Middleware Overview Prebuilt middleware Custom middleware Frontend Overview Patterns Integrations Advanced usage Guardrails Runtime Context engineering Model Context Protocol (MCP) Human-in-the-loop Multi-agent Retrieval Long-term memory Agent development LangSmith Studio Test Agent Chat UI Deploy with LangSmith Deployment Observability On this page Create an agent Core benefits LangChain overview Copy page LangCha...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

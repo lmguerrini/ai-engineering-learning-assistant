@@ -1,7 +1,7 @@
 # Agent Harness & Production Deployment
 
 - **Official source**: https://langchain-ai.github.io/langgraph/concepts/deployment/, https://python.langchain.com/docs/concepts/architecture/
-- **Last refreshed**: 2025-05-08
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`, `langchain>=0.2`
 
@@ -206,3 +206,17 @@ def test_full_workflow_no_api_key():
 - Deploying without load testing or cost projections.
 - Using production API keys in development/testing.
 - Not implementing graceful shutdown for long-running agent tasks.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.langchain.com/oss/python/langchain/overview
+
+```
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Open source Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangChain overview Deep Agents LangChain LangGraph Integrations Learn Reference Contribute Python Overview Get started Install Quickstart Changelog Philosophy Core components Agents Models Messages Tools Short-term memory Streaming Structured output Middleware Overview Prebuilt middleware Custom middleware Frontend Overview Patterns Integrations Advanced usage Guardrails Runtime Context engineering Model Context Protocol (MCP) Human-in-the-loop Multi-agent Retrieval Long-term memory Agent development LangSmith Studio Test Agent Chat UI Deploy with LangSmith Deployment Observability On this page Create an agent Core benefits LangChain overview Copy page LangCha...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

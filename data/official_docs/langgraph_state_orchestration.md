@@ -1,7 +1,7 @@
 # LangGraph State & Orchestration
 
 - **Official source**: https://langchain-ai.github.io/langgraph/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`
 
@@ -304,3 +304,17 @@ graph.get_graph().draw_mermaid_png(output_file_path="graph.png")
 - `src/graphs/learn_state.py`: Typed `LearningState` with trace accumulation.
 - `src/graphs/quiz_graph.py`: Quiz generation and evaluation graphs.
 - `src/graphs/learn_nodes.py`: Node functions following state-in/dict-out pattern.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://langchain-ai.github.io/langgraph/
+
+```
+Documentation has moved The LangGraph documentation has moved to docs.langchain.com. Redirecting you now...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

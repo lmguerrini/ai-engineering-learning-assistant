@@ -1,7 +1,7 @@
 # LangSmith Observability
 
 - **Official source**: https://docs.smith.langchain.com/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `langsmith>=0.1`
 
@@ -233,3 +233,17 @@ def check_sources_cited(run, example) -> EvaluationResult:
 - `src/config.py`: LangSmith settings (tracing flag, API key, project name).
 - `src/services/observability.py`: Tracing configuration and status utility.
 - `app.py`: Calls `configure_langsmith_tracing()` at startup.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.langchain.com/langsmith/home
+
+```
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page LangSmith Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangSmith docs Get started Observability Evaluation Prompt engineering Agent deployment Platform setup Reference Overview Create an account and API key Profile configuration Integrations Plans Enterprise features Account administration Overview Workspace setup Users & access control Billing & usage Manage organizations using the API Audit logs Tools Polly AI assistant CLI Skills Sandboxes Private preview Additional resources Data & compliance FAQ LangSmith status LangSmith docs Copy page Copy page Documentation Index Fetch the complete documentation index at: https://docs.langchain.com/llms.txt Use this file to discover all available pages before exploring furth...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

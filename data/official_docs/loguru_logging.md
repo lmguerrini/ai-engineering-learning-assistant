@@ -1,7 +1,7 @@
 # Loguru Logging
 
 - **Official source**: https://loguru.readthedocs.io/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `loguru>=0.7`
 
@@ -258,3 +258,17 @@ def test_logging_output():
 - All `src/` modules: Use `from loguru import logger` for consistent logging.
 - `src/kb/loader.py`, `src/kb/retrieval.py`: Log document loading and retrieval operations.
 - `src/graphs/learn_nodes.py`, `src/graphs/quiz_nodes.py`: Log workflow node execution.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://loguru.readthedocs.io/en/stable/
+
+```
+loguru Overview API Reference Help & Guides Project Information loguru Table of Contents Loguru is a library which aims to bring enjoyable logging in Python. Did you ever feel lazy about configuring a logger and used print() instead?… I did, yet logging is fundamental to every application and eases the process of debugging. Using Loguru you have no excuse not to use logging from the start, this is as simple as from loguru import logger. Also, this library is intended to make Python logging less painful by adding a bunch of useful functionalities that solve caveats of the standard loggers. Using logs in your application should be an automatism, Loguru tries to make it both pleasant and powerful. Table of Contents  Overview Installation Features Take the tour API Reference loguru.logger Type Hints Help & Guides Switching from Standard Logging to Loguru Frequently Asked Questions and Tr...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->

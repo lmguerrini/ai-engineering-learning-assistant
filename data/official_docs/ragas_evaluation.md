@@ -1,7 +1,7 @@
 # RAGAs Evaluation
 
 - **Official source**: https://docs.ragas.io/
-- **Last refreshed**: 2025-05-05
+- **Last refreshed**: 2026-05-11
 - **source_type**: official_docs
 - **Versions**: `ragas>=0.1`
 
@@ -228,3 +228,17 @@ These metrics enable continuous monitoring of production outputs without manual 
 - `src/eval/rag_evaluation.py`: Source coverage metrics and RAGAs-readiness evaluation.
 - `data/eval/retrieval_eval_cases.md`: Evaluation cases with query/expected-file pairs.
 - `scripts/run_rag_eval.py`: CLI runner for evaluation pipeline.
+
+<!-- AUTO-GENERATED SOURCE PREVIEW START -->
+## Latest Official Preview
+
+This machine-generated section is refreshed from the configured external documentation URLs.
+
+### https://docs.ragas.io/en/stable/
+
+```
+Skip to content Ragas Office Hours - If you need help setting up Evals for your AI application, sign up for our Office Hours here. Ragas Initializing search vibrantlabsai/ragas 🚀 Get Started 📚 Core Concepts 🛠️ How-to Guides 📖 References ❤️ Community Ragas vibrantlabsai/ragas Table of contents Why Ragas? Key Features Want help improving your AI application using evals? 🚀 Get Started 🚀 Get Started Installation Quick Start Tutorials Tutorials Evaluate a prompt Evaluate a simple RAG system Evaluate an AI Workflow Evaluate an AI Agent 📚 Core Concepts 📚 Core Concepts Experimentation Datasets Metrics Metrics Overview Available Metrics Available Metrics Retrieval Augmented Generation Retrieval Augmented Generation Context Precision Context Recall Context Entities Recall Noise Sensitivity Response Relevancy Faithfulness Nvidia Metrics Nvidia Metrics Answer Accuracy Context Relevance Response G...
+```
+
+*Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*
+<!-- AUTO-GENERATED SOURCE PREVIEW END -->
