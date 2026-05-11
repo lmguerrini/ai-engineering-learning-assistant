@@ -1,5 +1,7 @@
 """Dashboard (formerly Advanced / Debug) page renderer."""
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from src.ui.display_helpers import (
@@ -68,6 +70,22 @@ def _format_context_value(value) -> str:
     if isinstance(value, bool):
         return _format_bool_label(value)
     return str(value)
+
+
+def _format_dashboard_timestamp(value: str | None) -> str:
+    """Format an ISO timestamp into a compact reviewer-facing UTC label."""
+    if not value:
+        return "—"
+    try:
+        normalized = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return value
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc)
+        return parsed.strftime("%Y-%m-%d %H:%M UTC")
+    return parsed.strftime("%Y-%m-%d %H:%M")
 
 
 def _build_capability_registry_rows(
@@ -321,6 +339,71 @@ def _display_capability_registry_section(
     )
 
 
+def _display_external_docs_updater_section() -> None:
+    """Render the manual updater for external official docs."""
+    from src.services.external_docs_updater import (
+        get_external_docs_source_status,
+        update_external_docs,
+    )
+
+    st.subheader("External Docs / API Updater")
+    st.caption(
+        "Manually refreshes the configured external documentation snapshots under "
+        "`data/official_docs`. This updates local Markdown only and does not rebuild "
+        "Chroma automatically."
+    )
+    st.info(
+        "Run Rebuild KB Index after a successful docs update to make refreshed docs available to retrieval."
+    )
+
+    status_rows = get_external_docs_source_status()
+    st.markdown("#### Configured Sources")
+    st.dataframe(status_rows, use_container_width=True, hide_index=True)
+
+    if st.button("Update External Official Docs", key="btn_update_external_docs"):
+        with st.spinner("Checking configured external documentation sources..."):
+            result = update_external_docs()
+        st.session_state["external_docs_update_result"] = result
+        st.rerun()
+
+    result = st.session_state.get("external_docs_update_result")
+    if not result:
+        return
+
+    result_rows = result.get("results", [])
+    if result_rows:
+        checked_sources = int(result.get("checked_sources", len(result_rows)))
+        updated_files = sum(1 for row in result_rows if row.get("Status") == "Updated")
+        partial_files = sum(1 for row in result_rows if row.get("Status") == "Partial")
+        skipped_files = sum(1 for row in result_rows if row.get("Status") == "Skipped")
+        failed_files = sum(1 for row in result_rows if row.get("Status") == "Error")
+    else:
+        checked_sources = int(result.get("checked_sources", 0))
+        updated_files = int(result.get("updated_files", 0))
+        partial_files = int(result.get("partial_files", 0))
+        skipped_files = int(result.get("skipped_files", 0))
+        failed_files = int(result.get("error_count", 0))
+
+    if partial_files > 0:
+        st.warning("External docs partially updated. Review failed URLs, then run Rebuild KB Index to make refreshed docs available to retrieval.")
+    elif failed_files > 0:
+        st.warning("External docs update completed with failed files. Existing docs were preserved where possible.")
+    elif updated_files > 0:
+        st.success("External docs updated. Run Rebuild KB Index to make refreshed docs available to retrieval.")
+    else:
+        st.info("External docs check completed. No files were updated.")
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Checked Sources", str(checked_sources))
+    metric_cols[1].metric("Updated Files", str(updated_files))
+    metric_cols[2].metric("Partial Files", str(partial_files))
+    metric_cols[3].metric("Skipped Files", str(skipped_files))
+    metric_cols[4].metric("Failed Files", str(failed_files))
+
+    st.markdown("#### Latest Update Results")
+    st.dataframe(result["results"], use_container_width=True, hide_index=True)
+
+
 # ---------------------------------------------------------------------------
 # RAGAs content quality evaluation
 # ---------------------------------------------------------------------------
@@ -436,7 +519,7 @@ def _render_ragas_section() -> None:
         "Click the button to run a fresh evaluation (costs money and takes 5–10 min)."
     )
     st.warning(
-        "⚠️ Running RAGAs evaluation calls the OpenAI API (LLM judge) for each "
+        "Running RAGAs evaluation calls the OpenAI API (LLM judge) for each "
         "case and metric. The default 3 cases typically cost ~$0.01–0.03 and "
         "take 5–10 minutes. Do not run repeatedly without reason.",
     )
@@ -473,7 +556,9 @@ def _display_ragas_report(report) -> None:
     # ── Metadata (timestamp / model / case count) ────────────────────
     meta_parts: list[str] = []
     if getattr(report, "timestamp", ""):
-        meta_parts.append(f"**Run:** {report.timestamp}")
+        meta_parts.append(
+            f"**Run:** {_format_dashboard_timestamp(getattr(report, 'timestamp', ''))}"
+        )
     if getattr(report, "model", ""):
         meta_parts.append(f"**Model:** {report.model}")
     if getattr(report, "case_count", 0):
@@ -574,6 +659,10 @@ def _display_kb_health_section() -> None:
         "Tracks whether the local Chroma index matches the current curated and official markdown files."
     )
 
+    notice = st.session_state.pop("kb_rebuild_notice", None)
+    if notice:
+        st.success(notice)
+
     if health["status"] == "up_to_date":
         st.success("✅ KB index is up to date.")
     elif health["status"] == "metadata_missing":
@@ -582,7 +671,7 @@ def _display_kb_health_section() -> None:
             "was found yet. Rebuild once to enable freshness tracking."
         )
     elif health["status"] == "outdated":
-        st.warning("KB index is outdated. Rebuild recommended.")
+        st.warning("⚠️ KB index is outdated. Rebuild recommended.")
     else:
         st.warning("KB index is missing or incomplete. Rebuild required.")
 
@@ -594,7 +683,7 @@ def _display_kb_health_section() -> None:
             f"| Index Status | {health['status_label']} |\n"
             f"| Reindex Needed | {'Yes' if health['reindex_required'] else 'No'} |\n"
             f"| Embedding Model | {health['embedding_model']} |\n"
-            f"| Last Rebuild | {health.get('last_rebuild_at') or '—'} |"
+            f"| Last Rebuild | {_format_dashboard_timestamp(health.get('last_rebuild_at'))} |"
         )
     with summary_right:
         curated = health["collections"]["curated"]
@@ -782,17 +871,16 @@ def render_advanced() -> None:
     )
     st.divider()
 
-    notice = st.session_state.pop("kb_rebuild_notice", None)
-    if notice:
-        st.success(notice)
-
-    _display_kb_health_section()
-    st.divider()
-
     # ── Token and Cost Tracking ───────────────────────────────────────────
     st.subheader("Token and Cost Tracking")
     _display_latest_run_contexts(learn_result, quiz_result)
     _display_session_cost_summary()
+    st.divider()
+
+    _display_kb_health_section()
+    st.divider()
+
+    _display_external_docs_updater_section()
     st.divider()
 
     # ── Content Quality Evaluation (RAGAs) ─────────────────────────────

@@ -584,6 +584,28 @@ class TestPromptModeInstruction:
         assert "TOPIC study" in prompt
         assert "focused" in prompt.lower()
 
+    def test_learn_path_summary_prompt_uses_topic_led_sections(self):
+        from src.graphs.learn_prompts import _build_prompt
+
+        prompt = _build_prompt(
+            {
+                "topic": (
+                    "Foundations of AI Engineering: LLM basics, prompt engineering, "
+                    "development environment, and API usage"
+                ),
+                "difficulty": DifficultyLevel.BEGINNER,
+                "style": ResponseStyle.CONCISE,
+                "retrieved_docs": [],
+                "memory_profile": {},
+            }
+        )
+
+        assert "## Study Sequence" in prompt
+        assert "## LLM Basics" in prompt
+        assert "generic numbered template headings" in prompt
+        assert "Recommended Study Order" not in prompt
+        assert "Learn Path Overview" not in prompt
+
 
 class TestLearnSubtitle:
     """Learn subtitle should mention both Topic and Learn Path."""
@@ -951,9 +973,23 @@ class TestSidebarStatus:
         assert "KB Index:" in source
         runtime_info = 'with st.sidebar.expander("Runtime Info", expanded=True):'
         kb_status = 'st.caption(f"KB Index: {_kb_status}")'
+        external_docs = 'st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")'
+        ragas_status = 'st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")'
         model_line = 'st.caption(f"Model: {_s.app_default_model}")'
         assert source.index(runtime_info) < source.index(kb_status)
-        assert source.index(kb_status) < source.index(model_line)
+        assert source.index(kb_status) < source.index(external_docs)
+        assert source.index(external_docs) < source.index(ragas_status)
+        assert source.index(ragas_status) < source.index(model_line)
+
+    def test_sidebar_has_external_docs_and_ragas_status(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "Official Docs Sync:" in source
+        assert "RAGAs Evaluation:" in source
+        assert "Not updated" in source
+        assert "Passed" in source
+        assert "Needs review" in source
+        assert "Not run" in source
 
     def test_runtime_info_renders_after_active_page(self):
         with open("app.py") as f:
@@ -1430,10 +1466,21 @@ class TestDashboardStructure:
         assert "st.subheader(\"Observability\")" in source
         assert "st.subheader(\"Agent Capabilities / Tool Registry\")" in source
         assert "st.subheader(\"Knowledge Base Health\")" in source
+        assert "st.subheader(\"External Docs / API Updater\")" in source
         assert "st.subheader(\"Token and Cost Tracking\")" in source
         assert "st.subheader(\"Evaluation Readiness (RAGAs)\")" in source
         assert "st.subheader(\"Learning Signals\")" in source
         assert "st.subheader(\"Workflow Readiness\")" in source
+        render_block = source[source.index("def render_advanced()"):]
+        assert render_block.index("_display_capability_registry_section(") < render_block.index(
+            'st.subheader("Token and Cost Tracking")'
+        )
+        assert render_block.index('st.subheader("Token and Cost Tracking")') < render_block.index(
+            "_display_kb_health_section()"
+        )
+        assert render_block.index("_display_kb_health_section()") < render_block.index(
+            "_display_external_docs_updater_section()"
+        )
 
     def test_dashboard_highlights_project_strengths(self):
         with open("src/ui/dashboard_page.py") as f:
@@ -1491,6 +1538,23 @@ class TestDashboardStructure:
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
         assert '"Rebuild KB Index"' in source
+        assert '"Update External Official Docs"' in source
+        assert "This updates local Markdown only" in source
+        assert "Chroma automatically." in source
+        assert "Run Rebuild KB Index after a successful docs update" in source
+        assert '"Partial Files"' in source
+        assert '"Failed Files"' in source
+
+    def test_dashboard_ragas_warning_copy_has_no_leading_emoji(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "Running RAGAs evaluation calls the OpenAI API" in source
+        assert "⚠️ Running RAGAs evaluation calls the OpenAI API" not in source
+
+    def test_dashboard_formats_ragas_run_timestamp_for_display(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '_format_dashboard_timestamp(getattr(report, \'timestamp\', \'\'))' in source
 
     def test_dashboard_uses_dividers_between_major_sections(self):
         with open("src/ui/dashboard_page.py") as f:

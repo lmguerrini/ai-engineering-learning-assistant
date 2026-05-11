@@ -92,6 +92,34 @@ SECTIONS = {
     "Dashboard": render_advanced,
 }
 
+
+def _get_sidebar_external_docs_status() -> str:
+    """Return the latest external-doc refresh date for compact sidebar display."""
+    try:
+        from src.services.external_docs_updater import get_latest_external_docs_refresh_date
+
+        latest = get_latest_external_docs_refresh_date()
+    except Exception:
+        latest = None
+    return latest or "Not updated"
+
+
+def _get_sidebar_ragas_status() -> str:
+    """Return a compact reviewer-facing RAGAs benchmark status."""
+    try:
+        from src.eval.ragas_evaluation import PRIMARY_METRICS, load_ragas_results
+
+        report = load_ragas_results()
+        if report is None:
+            return "Not run"
+
+        primary_values = [getattr(report, f"avg_{field}", None) for field in PRIMARY_METRICS]
+        if all(value is not None and value >= 0.6 for value in primary_values):
+            return "Passed"
+        return "Needs review"
+    except Exception:
+        return "Not run"
+
 if "active_section" not in st.session_state:
     st.session_state["active_section"] = "Home"
 
@@ -131,6 +159,8 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         except Exception:
             _kb_status = "Missing"
         st.caption(f"KB Index: {_kb_status}")
+        st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")
+        st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")
         st.caption(f"Model: {_s.app_default_model}")
         st.caption("Input cost: $0.150000 / 1M tokens")
         st.caption("Output cost: $0.600000 / 1M tokens")
