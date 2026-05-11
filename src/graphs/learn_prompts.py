@@ -188,24 +188,27 @@ def _build_prompt(state: LearningState) -> str:
         level_label = difficulty.value.capitalize()
         stable_topics = _LEARN_PATH_STABLE_TOPICS.get(level_label, [])
         topic_list_str = "\n".join(f"  {i}. {name}" for i, name in enumerate(stable_topics, 1))
+        topic_heading_str = "\n".join(f"   - ## {name}" for name in stable_topics)
 
         style_instruction = (
             "Produce a COMPACT CURRICULUM OVERVIEW for this Learn Path.\n"
             "Structure it as a concise but substantive syllabus-style document.\n\n"
-            "Use this EXACT section order:\n\n"
-            "1. **Overview** — 3-5 sentences explaining the purpose and scope of this path.\n\n"
-            "2. **Topics** — a compact Markdown table with these columns:\n"
-            "   | # | Topic | Key Focus | Prerequisites | Estimated Effort |\n"
-            "   Use EXACTLY these topic names, one row per topic:\n"
+            "Use the JSON `summary` field for the short path overview.\n"
+            "In `detailed_notes`, do NOT repeat that overview and do NOT use generic numbered "
+            "template headings. Keep the structure tied to the actual path topics.\n\n"
+            "Use this exact structure in `detailed_notes`:\n\n"
+            "1. A `## Study Sequence` section with a short note on the recommended order.\n"
+            "2. A `## Learning Outcomes` section with 4-6 concise bullet points.\n"
+            "3. One `## <Topic Name>` section for EACH Learn Path topic, using these exact headings:\n"
+            f"{topic_heading_str}\n"
+            "   For each topic section, include:\n"
+            "   - a 2-3 sentence description of what the learner will study and why it matters\n"
+            "   - 2-4 short bullet points covering key concepts or skills\n"
+            "   - one brief prerequisite or connection note when relevant\n\n"
+            "When you reference the path topics, use EXACTLY these topic names:\n"
             f"{topic_list_str}\n"
             "   Do NOT rename, reorder, or skip any topic.\n\n"
-            "3. **Recommended Study Order** — a brief note on the suggested sequence.\n\n"
-            "4. **Learning Outcomes** — 5-7 bullet points describing what the learner will achieve.\n\n"
-            "5. **Learn Path Overview** — for each topic listed above, provide:\n"
-            "   • A 2-3 sentence description of what the learner will study and why it matters.\n"
-            "   • 3-4 key concepts as bullet points with brief explanations.\n"
-            "   • One sentence on prerequisites or connections to other topics.\n\n"
-            "The overview should be rich enough to serve as a standalone syllabus.\n"
+            "The result should read like a clean syllabus tied to the actual path topics.\n"
             "Do NOT include long code examples or deep explanations.\n"
             "Use proper Markdown formatting."
         )
