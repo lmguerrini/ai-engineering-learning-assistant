@@ -175,13 +175,23 @@ class TestCapabilityRegistry:
 
         official = next(row for row in rows if row["Capability"] == "Official Docs Retrieval")
         memory = next(row for row in rows if row["Capability"] == "Memory Profile")
+        feedback = next(row for row in rows if row["Capability"] == "Feedback Logger")
+        cost = next(row for row in rows if row["Capability"] == "Cost Tracker")
+        tracing = next(row for row in rows if row["Capability"] == "LangSmith Tracing")
+        ragas = next(row for row in rows if row["Capability"] == "RAGAs Evaluator")
+        rebuild = next(row for row in rows if row["Capability"] == "KB Rebuild Tool")
         progressive = next(row for row in rows if row["Capability"] == "Progressive Streaming")
         bypass = next(row for row in rows if row["Capability"] == "Cache Bypass")
 
-        assert official["Status"] == "Available"
+        assert official["Status"] == "Ready"
         assert official["Mode"] == "Optional"
-        assert official["User Control"] == "Automatic"
-        assert memory["Status"] == "Available"
+        assert official["User Control"] == "System-managed"
+        assert memory["Status"] == "Ready"
+        assert feedback["Status"] == "Ready"
+        assert cost["User Control"] == "System-managed"
+        assert tracing["User Control"] == "Environment-controlled"
+        assert ragas["Status"] == "Ready"
+        assert rebuild["Status"] == "Ready"
         assert progressive["Status"] == "Active"
         assert progressive["User Control"] == "Controlled in Learn"
         assert bypass["Status"] == "Off"
@@ -206,10 +216,23 @@ class TestCapabilityRegistry:
 
         mock_st.subheader.assert_called_once_with("Agent Capabilities / Tool Registry")
         mock_st.dataframe.assert_called_once()
+        caption_calls = [call.args[0] for call in mock_st.caption.call_args_list if call.args]
+        assert caption_calls[0] == (
+            "Maps the app's grounded retrieval, personalization, observability, and "
+            "manual review tools."
+        )
         rows = mock_st.dataframe.call_args.args[0]
         assert len(rows) == 10
         assert rows[0]["Capability"] == "Curated KB Retrieval"
         assert rows[-1]["Capability"] == "Cache Bypass"
+        assert list(rows[0].keys()) == [
+            "Capability",
+            "Status",
+            "Mode",
+            "User Control",
+            "Used By",
+            "Description",
+        ]
         assert mock_st.dataframe.call_args.kwargs["use_container_width"] is True
         assert mock_st.dataframe.call_args.kwargs["hide_index"] is True
 

@@ -1465,8 +1465,15 @@ class TestDashboardStructure:
         assert '"Capability": "Official Docs Retrieval"' in source
         assert '"Capability": "Progressive Streaming"' in source
         assert '"Capability": "Cache Bypass"' in source
+        assert "manual review tools." in source
+        assert "without adding new risky controls" not in source
+        assert '"User Control": "System-managed"' in source
+        assert '"User Control": "Environment-controlled"' in source
         assert '"User Control": "Controlled in Learn"' in source
         assert '"User Control": "Run in Dashboard"' in source
+        assert '"Status": "Ready" if official_ready else "Off"' in source
+        assert '"Status": "Ready" if memory_loaded else "Active"' not in source
+        assert '"Status": "Active" if memory_loaded else "Ready"' in source
 
     def test_dashboard_uses_clearer_learning_signal_empty_states(self):
         with open("src/ui/dashboard_page.py") as f:
