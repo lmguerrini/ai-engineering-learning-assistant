@@ -5,7 +5,9 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from src.ui.dashboard_page import (
+    _build_capability_registry_rows,
     _check_ragas_available,
+    _display_capability_registry_section,
     _metric_color,
     _fmt_metric,
     _format_ragas_case_label,
@@ -132,6 +134,84 @@ class TestDashboardSnapshotHelpers:
     def test_ragas_case_label_capitalizes_difficulty(self):
         case = MagicMock(topic="AI Agents and Tool Calling", difficulty="advanced")
         assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced)"
+
+
+# ---------------------------------------------------------------------------
+# Capability / Tool Registry
+# ---------------------------------------------------------------------------
+
+class TestCapabilityRegistry:
+    """Reviewer-facing capability registry should stay explicit and accurate."""
+
+    def test_build_capability_registry_rows_covers_expected_capabilities(self):
+        rows = _build_capability_registry_rows(
+            kb_health={
+                "collections": {
+                    "curated": {"chunk_count": 257},
+                    "official": {"chunk_count": 305},
+                }
+            },
+            tracing_info={"tracing_enabled": True},
+            ragas_available=True,
+            memory_loaded=False,
+            feedback_count=0,
+            progressive_streaming=True,
+            cache_bypass=False,
+            has_api_key=True,
+        )
+
+        assert [row["Capability"] for row in rows] == [
+            "Curated KB Retrieval",
+            "Official Docs Retrieval",
+            "Memory Profile",
+            "Feedback Logger",
+            "Cost Tracker",
+            "LangSmith Tracing",
+            "RAGAs Evaluator",
+            "KB Rebuild Tool",
+            "Progressive Streaming",
+            "Cache Bypass",
+        ]
+
+        official = next(row for row in rows if row["Capability"] == "Official Docs Retrieval")
+        memory = next(row for row in rows if row["Capability"] == "Memory Profile")
+        progressive = next(row for row in rows if row["Capability"] == "Progressive Streaming")
+        bypass = next(row for row in rows if row["Capability"] == "Cache Bypass")
+
+        assert official["Status"] == "Available"
+        assert official["Mode"] == "Optional"
+        assert official["User Control"] == "Automatic"
+        assert memory["Status"] == "Available"
+        assert progressive["Status"] == "Active"
+        assert progressive["User Control"] == "Controlled in Learn"
+        assert bypass["Status"] == "Off"
+
+    @patch("src.ui.dashboard_page.st")
+    def test_display_capability_registry_section_renders_table(self, mock_st):
+        _display_capability_registry_section(
+            kb_health={
+                "collections": {
+                    "curated": {"chunk_count": 257},
+                    "official": {"chunk_count": 305},
+                }
+            },
+            tracing_info={"tracing_enabled": False},
+            ragas_available=True,
+            memory_loaded=True,
+            feedback_count=3,
+            progressive_streaming=False,
+            cache_bypass=True,
+            has_api_key=True,
+        )
+
+        mock_st.subheader.assert_called_once_with("Agent Capabilities / Tool Registry")
+        mock_st.dataframe.assert_called_once()
+        rows = mock_st.dataframe.call_args.args[0]
+        assert len(rows) == 10
+        assert rows[0]["Capability"] == "Curated KB Retrieval"
+        assert rows[-1]["Capability"] == "Cache Bypass"
+        assert mock_st.dataframe.call_args.kwargs["use_container_width"] is True
+        assert mock_st.dataframe.call_args.kwargs["hide_index"] is True
 
 
 # ---------------------------------------------------------------------------

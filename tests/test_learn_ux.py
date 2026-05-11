@@ -1428,6 +1428,7 @@ class TestDashboardStructure:
         # Dashboard should use st.subheader for main sections
         assert "st.subheader(\"Review Snapshot\")" in source
         assert "st.subheader(\"Observability\")" in source
+        assert "st.subheader(\"Agent Capabilities / Tool Registry\")" in source
         assert "st.subheader(\"Knowledge Base Health\")" in source
         assert "st.subheader(\"Token and Cost Tracking\")" in source
         assert "st.subheader(\"Evaluation Readiness (RAGAs)\")" in source
@@ -1456,6 +1457,16 @@ class TestDashboardStructure:
         assert "Cache Hit" in source
         assert '"#### All Session Operations"' in source
         assert "use_container_width=True" in source
+
+    def test_dashboard_has_capability_registry_columns_and_controls(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert '"Capability": "Curated KB Retrieval"' in source
+        assert '"Capability": "Official Docs Retrieval"' in source
+        assert '"Capability": "Progressive Streaming"' in source
+        assert '"Capability": "Cache Bypass"' in source
+        assert '"User Control": "Controlled in Learn"' in source
+        assert '"User Control": "Run in Dashboard"' in source
 
     def test_dashboard_uses_clearer_learning_signal_empty_states(self):
         with open("src/ui/dashboard_page.py") as f:

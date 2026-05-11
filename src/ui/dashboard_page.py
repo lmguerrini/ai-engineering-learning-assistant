@@ -70,6 +70,108 @@ def _format_context_value(value) -> str:
     return str(value)
 
 
+def _build_capability_registry_rows(
+    *,
+    kb_health: dict,
+    tracing_info: dict,
+    ragas_available: bool,
+    memory_loaded: bool,
+    feedback_count: int,
+    progressive_streaming: bool,
+    cache_bypass: bool,
+    has_api_key: bool,
+) -> list[dict]:
+    """Build reviewer-facing rows that describe the app's agent capabilities."""
+    collections = kb_health.get("collections", {})
+    curated = collections.get("curated", {})
+    official = collections.get("official", {})
+    curated_ready = bool(curated.get("chunk_count"))
+    official_ready = bool(official.get("chunk_count"))
+
+    return [
+        {
+            "Capability": "Curated KB Retrieval",
+            "Used By": "Learn, Quiz",
+            "Status": "Active" if curated_ready else "Off",
+            "Mode": "Required",
+            "User Control": "Automatic",
+            "Description": "Primary grounded retrieval over curated course notes for Learn and Quiz.",
+        },
+        {
+            "Capability": "Official Docs Retrieval",
+            "Used By": "Learn, Quiz",
+            "Status": "Available" if official_ready else "Off",
+            "Mode": "Optional",
+            "User Control": "Automatic",
+            "Description": "Supplements retrieval with indexed official docs when domain matching applies.",
+        },
+        {
+            "Capability": "Memory Profile",
+            "Used By": "Learn, Quiz, Progress, Dashboard",
+            "Status": "Active" if memory_loaded else "Available",
+            "Mode": "Optional",
+            "User Control": "Save quiz results",
+            "Description": "Uses stored learner history to personalize study, quizzes, and progress summaries.",
+        },
+        {
+            "Capability": "Feedback Logger",
+            "Used By": "Learn, Quiz, Progress, Dashboard",
+            "Status": "Active" if feedback_count > 0 else "Available",
+            "Mode": "Optional",
+            "User Control": "Submit in Learn/Quiz",
+            "Description": "Stores ratings and comments that feed reviewer-facing feedback signals.",
+        },
+        {
+            "Capability": "Cost Tracker",
+            "Used By": "Learn, Quiz, Dashboard",
+            "Status": "Active",
+            "Mode": "Required",
+            "User Control": "Automatic",
+            "Description": "Captures token usage and estimated cost for each tracked LLM operation.",
+        },
+        {
+            "Capability": "LangSmith Tracing",
+            "Used By": "Learn, Quiz, Dashboard",
+            "Status": "Active" if tracing_info.get("tracing_enabled") else "Off",
+            "Mode": "Optional",
+            "User Control": "Environment config",
+            "Description": "Publishes workflow and LLM traces to LangSmith when tracing is enabled.",
+        },
+        {
+            "Capability": "RAGAs Evaluator",
+            "Used By": "Dashboard",
+            "Status": "Available" if ragas_available else "Off",
+            "Mode": "Manual",
+            "User Control": "Run in Dashboard",
+            "Description": "Runs manual Learn benchmarks with LLM-judged RAGAs quality metrics.",
+        },
+        {
+            "Capability": "KB Rebuild Tool",
+            "Used By": "Dashboard",
+            "Status": "Available" if has_api_key else "Off",
+            "Mode": "Manual",
+            "User Control": "Run in Dashboard",
+            "Description": "Rebuilds curated and official KB collections and refreshes health metadata.",
+        },
+        {
+            "Capability": "Progressive Streaming",
+            "Used By": "Learn",
+            "Status": "Active" if progressive_streaming else "Off",
+            "Mode": "User-controlled",
+            "User Control": "Controlled in Learn",
+            "Description": "Replays eligible Deep Study output progressively without changing final Learn content.",
+        },
+        {
+            "Capability": "Cache Bypass",
+            "Used By": "Learn",
+            "Status": "Active" if cache_bypass else "Off",
+            "Mode": "User-controlled",
+            "User Control": "Controlled in Learn",
+            "Description": "Forces fresh Learn generation instead of reusing a cached result.",
+        },
+    ]
+
+
 def _build_session_operation_rows(records: list[dict]) -> list[dict]:
     """Convert stored usage records into compact dashboard table rows."""
     return [
@@ -183,6 +285,40 @@ def _display_session_cost_summary() -> None:
     with st.expander("Raw details"):
         st.markdown(f"**Total records:** {len(records)}")
         st.json(records)
+
+
+def _display_capability_registry_section(
+    *,
+    kb_health: dict,
+    tracing_info: dict,
+    ragas_available: bool,
+    memory_loaded: bool,
+    feedback_count: int,
+    progressive_streaming: bool,
+    cache_bypass: bool,
+    has_api_key: bool,
+) -> None:
+    """Render a reviewer-facing table of the app's agent capabilities."""
+    st.subheader("Agent Capabilities / Tool Registry")
+    st.caption(
+        "Maps the app's grounded retrieval, personalization, observability, and "
+        "manual review tools without adding new risky controls."
+    )
+    rows = _build_capability_registry_rows(
+        kb_health=kb_health,
+        tracing_info=tracing_info,
+        ragas_available=ragas_available,
+        memory_loaded=memory_loaded,
+        feedback_count=feedback_count,
+        progressive_streaming=progressive_streaming,
+        cache_bypass=cache_bypass,
+        has_api_key=has_api_key,
+    )
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.caption(
+        "Required capabilities stay automatic. Optional controls remain in Learn "
+        "or Dashboard where they already exist."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -509,15 +645,20 @@ def render_advanced() -> None:
     )
 
     from src.config import get_settings
+    from src.kb.index_health import get_kb_index_health
     from src.services.observability import format_tracing_status, get_tracing_status
 
     settings = get_settings()
     status = get_tracing_status()
     info = format_tracing_status(status)
     ragas_report = _get_ragas_report()
+    ragas_available, _ragas_reason = _check_ragas_available()
     session_usage = _get_session_usage_summary()
     learn_result = st.session_state.get("last_learn_result", {})
     quiz_result = st.session_state.get("last_quiz_gen_result", {})
+    kb_health = get_kb_index_health()
+    progressive_streaming = bool(st.session_state.get("last_learn_progressive_streaming", False))
+    cache_bypass = bool(st.session_state.get("last_learn_force_regenerate", False))
 
     try:
         from src.memory.memory_service import get_user_profile_summary
@@ -627,6 +768,18 @@ def render_advanced() -> None:
             "chunk_overlap": settings.chunk_overlap,
             "api_key_configured": bool(settings.openai_api_key),
         })
+    st.divider()
+
+    _display_capability_registry_section(
+        kb_health=kb_health,
+        tracing_info=info,
+        ragas_available=ragas_available,
+        memory_loaded=mem["loaded"],
+        feedback_count=fb_summary.get("total_count", 0),
+        progressive_streaming=progressive_streaming,
+        cache_bypass=cache_bypass,
+        has_api_key=bool(settings.openai_api_key),
+    )
     st.divider()
 
     notice = st.session_state.pop("kb_rebuild_notice", None)
