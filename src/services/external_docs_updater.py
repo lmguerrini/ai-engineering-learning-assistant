@@ -31,7 +31,6 @@ EXTERNAL_DOC_SOURCES: list[dict[str, object]] = [
         "name": "AI Agents & ReAct Pattern",
         "filename": "ai_agents_react_pattern.md",
         "urls": [
-            "https://arxiv.org/abs/2210.03629",
             "https://python.langchain.com/docs/concepts/agents/",
         ],
     },
@@ -170,6 +169,11 @@ def get_external_docs_source_status(
             }
         )
     return rows
+
+
+def preview_external_doc_content(content: str, max_chars: int = 900) -> str:
+    """Return a compact readable preview for fetched external-doc content."""
+    return _preview_text(content, max_chars=max_chars)
 
 
 def get_latest_external_docs_refresh_date(
