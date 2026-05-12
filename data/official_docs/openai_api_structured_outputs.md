@@ -1,7 +1,7 @@
 # OpenAI API & Structured Outputs
 
 - **Official source**: https://platform.openai.com/docs/
-- **Last refreshed**: 2026-05-11
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: API `v1`, Python SDK `openai>=1.0`
 

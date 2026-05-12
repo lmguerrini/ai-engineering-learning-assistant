@@ -1,7 +1,7 @@
 # Streamlit App Patterns
 
 - **Official source**: https://docs.streamlit.io/
-- **Last refreshed**: 2026-05-11
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: `streamlit>=1.30`
 

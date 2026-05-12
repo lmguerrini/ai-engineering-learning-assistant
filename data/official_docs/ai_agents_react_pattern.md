@@ -1,7 +1,7 @@
 # AI Agents & ReAct Pattern
 
-- **Official source**: https://arxiv.org/abs/2210.03629, https://python.langchain.com/docs/concepts/agents/
-- **Last refreshed**: 2026-05-11
+- **Official source**: https://python.langchain.com/docs/concepts/agents/
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: `langchain>=0.2`, `langgraph>=0.2`
 
@@ -213,12 +213,6 @@ Common debugging workflow:
 ## Latest Official Preview
 
 This machine-generated section is refreshed from the configured external documentation URLs.
-
-### https://arxiv.org/abs/2210.03629
-
-```
-Skip to main content Learn about arXiv becoming an independent nonprofit. We gratefully acknowledge support from the Simons Foundation, member institutions, and all contributors. Donate > cs > arXiv:2210.03629 Help | Advanced Search All fields Title Author Abstract Comments Journal reference ACM classification MSC classification Report number arXiv identifier DOI ORCID arXiv author ID Help pages Full text Search GO quick links Login Help Pages About Computer Science > Computation and Language arXiv:2210.03629 (cs) [Submitted on 6 Oct 2022 ( v1 ), last revised 10 Mar 2023 (this version, v3)] Title: ReAct: Synergizing Reasoning and Acting in Language Models Authors: Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao View a PDF of the paper titled ReAct: Synergizing Reasoning and Acting in Language Models, by Shunyu Yao and 6 other authors View PDF Abs...
-```
 
 ### https://docs.langchain.com/oss/python/langchain/overview
 

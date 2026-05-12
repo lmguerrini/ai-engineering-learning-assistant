@@ -1,7 +1,7 @@
 # State Management & Agentic RAG
 
 - **Official source**: https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/, https://python.langchain.com/docs/concepts/rag/
-- **Last refreshed**: 2026-05-11
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`, `langchain>=0.2`
 

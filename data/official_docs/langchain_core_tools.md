@@ -1,7 +1,7 @@
 # LangChain Core & Tools
 
 - **Official source**: https://docs.langchain.com/
-- **Last refreshed**: 2026-05-11
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: `langchain-core>=0.3`, `langchain>=0.3`
 

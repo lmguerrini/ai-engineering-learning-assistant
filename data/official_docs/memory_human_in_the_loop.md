@@ -1,7 +1,7 @@
 # Long-Term Memory & Human-in-the-Loop
 
 - **Official source**: https://langchain-ai.github.io/langgraph/concepts/memory/, https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
-- **Last refreshed**: 2026-05-11
+- **Last refreshed**: 2026-05-12
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`, `langchain>=0.2`
 
