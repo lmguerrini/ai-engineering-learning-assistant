@@ -20,6 +20,7 @@ from src.ui.shared import (  # noqa: F401
     _show_friendly_error,
 )
 from src.ui.learn_page import render_learn  # noqa: F401
+from src.ui.help_page import render_help_assistant  # noqa: F401
 from src.ui.quiz_page import (  # noqa: F401
     _display_hitl_save,
     _display_quiz_questions,
@@ -52,7 +53,8 @@ def render_intro() -> None:
         "- **Progress** — Review your scores, weak areas, and "
         "learning preferences.\n"
         "- **Dashboard** — Inspect retrieval data, graph traces, "
-        "and settings."
+        "and settings.\n"
+        "- **Help Assistant** — Ask scoped AI engineering questions with approved live official-doc enrichment."
     )
 
     st.markdown("Select a section from the sidebar to get started.")
@@ -71,4 +73,3 @@ def render_intro() -> None:
         _col, _ = st.columns([2, 1])
         with _col:
             st.info("This is an early version. Configure your .env file to get started.")
-

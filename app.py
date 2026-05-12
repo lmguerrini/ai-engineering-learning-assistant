@@ -4,7 +4,14 @@ import streamlit as st
 
 from src.logging_config import setup_logging
 from src.services.observability import configure_langsmith_tracing
-from src.ui.pages import render_intro, render_quiz, render_progress, render_advanced
+from src.ui.pages import (
+    render_advanced,
+    render_help_assistant,
+    render_intro,
+    render_progress,
+    render_quiz,
+)
+from src.ui.help_page import queue_help_assistant_question
 from src.ui.learn_page import render_learn
 
 setup_logging()
@@ -90,6 +97,7 @@ SECTIONS = {
     "Quiz": render_quiz,
     "Progress": render_progress,
     "Dashboard": render_advanced,
+    "Help Assistant": render_help_assistant,
 }
 
 
@@ -161,6 +169,10 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         st.caption(f"KB Index: {_kb_status}")
         st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")
         st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")
+        st.caption(
+            f"Agent Personality: "
+            f"{st.session_state.get('help_assistant_personality_mode', 'Technical')}"
+        )
         st.caption(f"Model: {_s.app_default_model}")
         st.caption("Input cost: $0.150000 / 1M tokens")
         st.caption("Output cost: $0.600000 / 1M tokens")
@@ -219,14 +231,27 @@ with st.sidebar.expander("Help"):
         "- **Workflow traces** — Full Learn and Quiz pipeline traces "
         "with latency and step details.\n"
         "- **Settings and diagnostics** — Memory profile, feedback "
-        "history, and runtime configuration.\n\n"
-        "---\n\n"
-        "**5. LangSmith**\n\n"
-        "External observability platform for end-to-end LLM tracing and debugging.\n\n"
-        "- **Tracing** — End-to-end traces for every LLM call, "
-        "retrieval step, and graph node.\n"
-        "- **Debugging** — Latency, token counts, prompt/completion "
-        "pairs, and error details per trace.\n"
+        "history, and runtime configuration.\n"
+        "- **LangSmith tracing** — End-to-end observability for LLM calls, "
+        "retrieval steps, graph nodes, latency, token counts, and prompt/completion details.\n"
         "- **Required configuration** — Set `LANGCHAIN_TRACING_V2=true` "
-        "and `LANGCHAIN_API_KEY` in your `.env` file."
+        "and `LANGCHAIN_API_KEY` in your `.env` file.\n\n"
+        )
+    st.markdown(
+        "---\n\n"
+        "**5. Help Assistant**\n\n"
+        "Scoped AI engineering help for this app. It answers app workflow and AI-engineering questions "
+        "using curated KB context, official-doc snapshots, and approved live official docs when relevant."
     )
+
+    from src.services.help_assistant import get_help_assistant_example_groups
+
+    for category, prompts in get_help_assistant_example_groups().items():
+        st.markdown(f"**{category}**")
+        for idx, prompt in enumerate(prompts):
+            if st.button(
+                prompt,
+                key=f"sidebar_help_assistant_{category}_{idx}",
+                use_container_width=True,
+            ):
+                queue_help_assistant_question(prompt)
