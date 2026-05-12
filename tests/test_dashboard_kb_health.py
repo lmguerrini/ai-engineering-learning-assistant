@@ -173,6 +173,41 @@ class TestDisplayKbHealthSection:
         assert any("no kb health metadata baseline" in call.lower() for call in info_calls)
 
 
+class TestDisplayHelpAssistantSection:
+    @patch("src.ui.dashboard_page.st")
+    def test_reads_current_style_from_help_assistant_session_key(self, mock_st):
+        from src.ui.dashboard_page import _display_help_assistant_section
+
+        _setup_mock_st(mock_st)
+        mock_st.session_state = {
+            "help_assistant_personality_mode": "Formal",
+            "help_assistant_chat_history": [{"question": "Q1"}, {"question": "Q2"}],
+            "help_assistant_temperature": 0.3,
+            "help_assistant_top_p": 0.9,
+        }
+
+        _display_help_assistant_section()
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        assert any("| Agent Personality | Formal |" in text for text in markdown_calls)
+        assert any("| Session Turns | 2 |" in text for text in markdown_calls)
+        assert any("| Recent Context Window | Last 5 turns |" in text for text in markdown_calls)
+        assert any("| Runtime Sampling | Temperature=0.3 \\| Top-p=0.9 |" in text for text in markdown_calls)
+        assert any("| Dimension | Technical | Concise | Friendly | Formal |" in text for text in markdown_calls)
+
+    @patch("src.ui.dashboard_page.st")
+    def test_dashboard_help_assistant_section_defaults_style_to_technical(self, mock_st):
+        from src.ui.dashboard_page import _display_help_assistant_section
+
+        _setup_mock_st(mock_st)
+        mock_st.session_state = {"help_assistant_chat_history": []}
+
+        _display_help_assistant_section()
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        assert any("| Agent Personality | Technical |" in text for text in markdown_calls)
+
+
 class TestDisplayExternalDocsUpdaterSection:
     @patch("src.ui.dashboard_page.st")
     @patch("src.services.external_docs_updater.get_external_docs_source_status")

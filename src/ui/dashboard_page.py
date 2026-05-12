@@ -211,9 +211,33 @@ def _build_session_operation_rows(records: list[dict]) -> list[dict]:
 
 def _format_ragas_case_label(result) -> str:
     """Return a reviewer-friendly RAGAs case label."""
-    difficulty = getattr(result, "difficulty", "") or ""
-    difficulty_label = difficulty.capitalize() if difficulty else "Unknown"
-    return f"{result.topic} ({difficulty_label})"
+    from src.eval.ragas_evaluation import DEFAULT_CASES, _format_case_display_label
+
+    label_detail = _format_case_display_label(
+        getattr(result, "topic", ""),
+        difficulty=getattr(result, "difficulty", "") or "",
+        surface=getattr(result, "surface", None),
+        configured_cases=DEFAULT_CASES,
+    )
+    if label_detail:
+        return f"{result.topic} ({label_detail})"
+    return f"{result.topic}"
+
+
+def _build_ragas_display_entries(report) -> list[tuple[object, object | None]]:
+    """Return configured RAGAs cases paired with evaluated or pending results."""
+    from src.eval.ragas_evaluation import DEFAULT_CASES
+
+    result_by_topic = {result.topic: result for result in report.results}
+    entries: list[tuple[object, object | None]] = [
+        (case, result_by_topic.get(case.topic))
+        for case in DEFAULT_CASES
+    ]
+    configured_topics = {case.topic for case in DEFAULT_CASES}
+    for result in report.results:
+        if result.topic not in configured_topics:
+            entries.append((result, result))
+    return entries
 
 
 def _metric_status_label(field_name: str, value: float | None) -> str:
@@ -404,6 +428,57 @@ def _display_external_docs_updater_section() -> None:
     st.dataframe(result["results"], use_container_width=True, hide_index=True)
 
 
+def _display_help_assistant_section() -> None:
+    """Render a lightweight reviewer-facing summary of Help Assistant state."""
+    from src.services.help_assistant import (
+        get_help_assistant_personality_profiles,
+        get_help_assistant_runtime_defaults,
+    )
+
+    personality_mode = st.session_state.get("help_assistant_personality_mode", "Technical")
+    turn_count = len(st.session_state.get("help_assistant_chat_history", []))
+    runtime_defaults = get_help_assistant_runtime_defaults(personality_mode)
+    temperature = st.session_state.get("help_assistant_temperature", runtime_defaults["temperature"])
+    top_p = st.session_state.get("help_assistant_top_p", runtime_defaults["top_p"])
+    runtime_sampling = f"Temperature={temperature} \\| Top-p={top_p}"
+    profiles = get_help_assistant_personality_profiles()
+
+    st.subheader("Help Assistant")
+    st.caption(
+        "Reviewer-facing summary of the scoped app/chat assistant and its current session state."
+    )
+    summary_cols = st.columns(2)
+    with summary_cols[0]:
+        st.markdown(
+            f"| Field | Value |\n"
+            f"|---|---|\n"
+            f"| Domain Guard | Enabled |\n"
+            f"| Live Docs Scope | Approved official docs only |\n"
+            f"| Session Chat Memory | Enabled |\n"
+            f"| Recent Context Window | Last 5 turns |\n"
+            f"| Agent Personality | {personality_mode} |"
+        )
+    with summary_cols[1]:
+        st.markdown(
+            f"| Field | Value |\n"
+            f"|---|---|\n"
+            f"| Session Turns | {turn_count} |\n"
+            f"| Runtime Sampling | {runtime_sampling} |\n"
+            f"| Live Enrichment | Available |\n"
+            f"| Source Provenance | Grouped KB + Live |\n"
+            f"| Empty Submit Handling | Banner only, not stored |"
+        )
+    st.markdown("##### Agent Personality Profiles")
+    st.markdown(
+        "| Dimension | Technical | Concise | Friendly | Formal |\n"
+        "|---|---|---|---|---|\n"
+        f"| Tone | {profiles['Technical']['tone']} | {profiles['Concise']['tone']} | {profiles['Friendly']['tone']} | {profiles['Formal']['tone']} |\n"
+        f"| Verbosity | {profiles['Technical']['verbosity']} | {profiles['Concise']['verbosity']} | {profiles['Friendly']['verbosity']} | {profiles['Formal']['verbosity']} |\n"
+        f"| Best Use Case | {profiles['Technical']['best_use_case']} | {profiles['Concise']['best_use_case']} | {profiles['Friendly']['best_use_case']} | {profiles['Formal']['best_use_case']} |\n"
+        f"| Output Style | {profiles['Technical']['output_style']} | {profiles['Concise']['output_style']} | {profiles['Friendly']['output_style']} | {profiles['Formal']['output_style']} |"
+    )
+
+
 # ---------------------------------------------------------------------------
 # RAGAs content quality evaluation
 # ---------------------------------------------------------------------------
@@ -548,8 +623,7 @@ def _run_ragas_and_display() -> None:
 def _display_ragas_report(report) -> None:
     """Display a RAGAsReport in the Dashboard."""
     from src.eval.ragas_evaluation import (
-        ANSWER_CORRECTNESS_NOTE,
-        PRIMARY_METRICS,
+        DEFAULT_CASES,
         format_ragas_report,
     )
 
@@ -591,26 +665,37 @@ def _display_ragas_report(report) -> None:
         "Answer Relevancy near the threshold can shift slightly across judge runs."
     )
 
-    # ── Diagnostic metric ────────────────────────────────────────────
-    st.markdown("#### Diagnostic Metric")
-    diag_col, diag_note_col = st.columns([1, 3])
-    diag_col.metric(
-        label="Answer Correctness",
-        value=_fmt_metric(report.avg_answer_correctness),
-        help="Diagnostic only — not used for pass/fail or primary Learn quality decisions.",
+    st.markdown("#### Benchmark Coverage")
+    learn_path_topics = {
+        case.topic for case in DEFAULT_CASES if case.surface == "learn_path"
+    }
+    topic_mode_topics = {
+        case.topic for case in DEFAULT_CASES if case.surface == "topic_mode"
+    }
+    help_topics = {
+        case.topic for case in DEFAULT_CASES if case.surface == "help_assistant"
+    }
+    evaluated_topics = {result.topic for result in report.results}
+    learn_path_evaluated = len(learn_path_topics & evaluated_topics)
+    st.caption("Reviewer-facing summary of cached evaluated coverage vs configured pending cases.")
+    st.markdown(
+        f"- Learn Path: {learn_path_evaluated} cached evaluated case(s)\n"
+        f"- Topic Mode: {len(topic_mode_topics)} configured pending case\n"
+        f"- Help Assistant: {len(help_topics)} configured pending case(s)"
     )
-    diag_note_col.info(
-        "Low Answer Correctness usually reflects mismatch between a long generated study guide "
-        "and a short reference answer, not poor grounded Learn quality."
-    )
-    st.caption(ANSWER_CORRECTNESS_NOTE)
+    st.caption("Pending cases will be scored after running a fresh RAGAs evaluation.")
 
     # ── Per-case breakdown ───────────────────────────────────────────
     st.markdown("#### Per-Case Breakdown")
-    for r in report.results:
-        label = _format_ragas_case_label(r)
-        if r.error:
-            st.error(f"**{label}** — Error: {r.error}")
+    for configured_case, result in _build_ragas_display_entries(report):
+        label = _format_ragas_case_label(result or configured_case)
+        if result is None:
+            with st.expander(label):
+                st.info("Not evaluated yet. Run a fresh RAGAs evaluation to generate metrics.")
+            continue
+
+        if result.error:
+            st.error(f"**{label}** — Error: {result.error}")
             continue
 
         with st.expander(label):
@@ -620,26 +705,25 @@ def _display_ragas_report(report) -> None:
             )
             rows = ""
             for name, field_name, val in [
-                ("Faithfulness", "faithfulness", r.faithfulness),
-                ("Answer Relevancy", "answer_relevancy", r.answer_relevancy),
-                ("Context Precision", "context_precision", r.context_precision),
-                ("Context Recall", "context_recall", r.context_recall),
-                ("Answer Correctness", "answer_correctness", r.answer_correctness),
+                ("Faithfulness", "faithfulness", result.faithfulness),
+                ("Answer Relevancy", "answer_relevancy", result.answer_relevancy),
+                ("Context Precision", "context_precision", result.context_precision),
+                ("Context Recall", "context_recall", result.context_recall),
+                ("Answer Correctness", "answer_correctness", result.answer_correctness),
             ]:
-                role = "Primary" if field_name in PRIMARY_METRICS else "Diagnostic"
+                role = "Diagnostic" if field_name == "answer_correctness" else "Primary"
                 rows += (
                     f"| {name} | {_fmt_metric(val)} | "
                     f"{_metric_status_label(field_name, val)} | {role} |\n"
                 )
             st.markdown(header + rows)
             st.caption(
-                f"Contexts: {r.num_contexts} · Answer length: {r.answer_length:,} chars · "
-                f"Answer Correctness is diagnostic only."
+                f"Contexts: {result.num_contexts} · Answer length: {result.answer_length:,} chars"
             )
 
     # ── Raw report ───────────────────────────────────────────────────
     with st.expander("Raw RAGAs Report"):
-        st.code(format_ragas_report(report), language="text")
+        st.code(format_ragas_report(report, configured_cases=DEFAULT_CASES), language="text")
 
 
 # ---------------------------------------------------------------------------
@@ -812,13 +896,6 @@ def render_advanced() -> None:
         help="Whether a Quiz run is available for trace inspection.",
     )
 
-    st.markdown("**Project Strengths**")
-    st.markdown(
-        "- LangGraph workflows with reviewer-visible traces and LangSmith observability.\n"
-        "- Cached RAGAs benchmark for evaluation readiness, with reruns kept manual and cost-aware.\n"
-        "- Session-level token and cost tracking across Learn and Quiz.\n"
-        "- Personalization signals from learning memory and feedback summaries."
-    )
     st.divider()
 
     # ── Observability ─────────────────────────────────────────────────────
@@ -875,6 +952,9 @@ def render_advanced() -> None:
     st.subheader("Token and Cost Tracking")
     _display_latest_run_contexts(learn_result, quiz_result)
     _display_session_cost_summary()
+    st.divider()
+
+    _display_help_assistant_section()
     st.divider()
 
     _display_kb_health_section()

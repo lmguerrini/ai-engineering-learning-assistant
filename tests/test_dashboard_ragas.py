@@ -133,7 +133,11 @@ class TestDashboardSnapshotHelpers:
 
     def test_ragas_case_label_capitalizes_difficulty(self):
         case = MagicMock(topic="AI Agents and Tool Calling", difficulty="advanced")
-        assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced)"
+        assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced, Learn Path)"
+
+    def test_ragas_case_label_uses_topic_mode_suffix_without_difficulty(self):
+        case = MagicMock(topic="LangGraph", difficulty="")
+        assert _format_ragas_case_label(case) == "LangGraph (Topic Mode)"
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +253,9 @@ class TestDisplayRagasReport:
         return RAGAsReport(
             results=[
                 RAGAsCaseResult(
-                    topic="LLM Basics",
+                    topic="LLM Basics and Prompt Engineering",
                     difficulty="beginner",
+                    surface="learn_path",
                     faithfulness=1.0,
                     answer_relevancy=0.81,
                     context_precision=0.69,
@@ -260,8 +265,21 @@ class TestDisplayRagasReport:
                     answer_length=5000,
                 ),
                 RAGAsCaseResult(
-                    topic="AI Agents",
+                    topic="RAG and Vector Databases",
+                    difficulty="intermediate",
+                    surface="learn_path",
+                    faithfulness=0.94,
+                    answer_relevancy=0.75,
+                    context_precision=0.72,
+                    context_recall=1.0,
+                    answer_correctness=0.61,
+                    num_contexts=10,
+                    answer_length=6200,
+                ),
+                RAGAsCaseResult(
+                    topic="AI Agents and Tool Calling",
                     difficulty="advanced",
+                    surface="learn_path",
                     faithfulness=None,
                     answer_relevancy=0.70,
                     context_precision=0.54,
@@ -279,7 +297,7 @@ class TestDisplayRagasReport:
             avg_answer_correctness=0.365,
             timestamp="2025-05-09T00:00:00Z",
             model="gpt-4o-mini",
-            case_count=2,
+            case_count=3,
         )
 
     def _setup_mock_st(self, mock_st):
@@ -326,17 +344,19 @@ class TestDisplayRagasReport:
         assert "Faithfulness" in warning_text
 
     @patch("src.ui.dashboard_page.st")
-    def test_display_shows_diagnostic_note(self, mock_st):
+    def test_display_shows_benchmark_coverage_summary(self, mock_st):
         from src.ui.dashboard_page import _display_ragas_report
 
         self._setup_mock_st(mock_st)
         report = self._make_report()
         _display_ragas_report(report)
 
-        # Should show diagnostic note about Answer Correctness
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
+        assert any("Learn Path: 3 cached evaluated case(s)" in text for text in markdown_calls)
+        assert any("Topic Mode: 1 configured pending case" in text for text in markdown_calls)
+        assert any("Help Assistant: 2 configured pending case(s)" in text for text in markdown_calls)
         caption_calls = [str(c) for c in mock_st.caption.call_args_list]
-        has_diagnostic = any("diagnostic" in c.lower() for c in caption_calls)
-        assert has_diagnostic, f"Diagnostic note not found in caption calls: {caption_calls}"
+        assert any("Pending cases will be scored after running a fresh RAGAs evaluation." in c for c in caption_calls)
 
     @patch("src.ui.dashboard_page.st")
     def test_display_shows_borderline_variance_note(self, mock_st):
@@ -350,7 +370,18 @@ class TestDisplayRagasReport:
         assert any("borderline yellow" in c.lower() for c in caption_calls)
 
     @patch("src.ui.dashboard_page.st")
-    def test_display_keeps_answer_correctness_diagnostic_role_with_normal_status_dot(self, mock_st):
+    def test_display_shows_pending_placeholders_for_unevaluated_cases(self, mock_st):
+        from src.ui.dashboard_page import _display_ragas_report
+
+        self._setup_mock_st(mock_st)
+        report = self._make_report()
+        _display_ragas_report(report)
+
+        info_calls = [call.args[0] for call in mock_st.info.call_args_list if call.args]
+        assert info_calls.count("Not evaluated yet. Run a fresh RAGAs evaluation to generate metrics.") == 3
+
+    @patch("src.ui.dashboard_page.st")
+    def test_display_restores_answer_correctness_only_inside_per_case_tables(self, mock_st):
         from src.ui.dashboard_page import _display_ragas_report
 
         self._setup_mock_st(mock_st)
@@ -362,10 +393,9 @@ class TestDisplayRagasReport:
         assert any(
             "| Answer Correctness |" in text
             and "| Diagnostic |" in text
-            and "Diagnostic only" not in text
-            and ("🟡" in text or "🔴" in text or "🟢" in text)
             for text in table_calls
         )
+        assert all("#### Diagnostic Metric" not in text for text in markdown_calls)
 
     @patch("src.ui.dashboard_page.st")
     def test_display_shows_error_case(self, mock_st):
