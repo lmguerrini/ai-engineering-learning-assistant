@@ -28,13 +28,16 @@ from src.eval.ragas_evaluation import (
 
 class TestRAGAsEvalCase:
     def test_default_cases_count(self):
-        assert len(DEFAULT_CASES) == 3
+        assert len(DEFAULT_CASES) == 6
 
     def test_default_cases_topics(self):
         topics = [c.topic for c in DEFAULT_CASES]
         assert "LLM Basics and Prompt Engineering" in topics
         assert "RAG and Vector Databases" in topics
         assert "AI Agents and Tool Calling" in topics
+        assert "LangGraph" in topics
+        assert "How does this app work?" in topics
+        assert "Difference between RAG and Agentic RAG" in topics
 
     def test_default_cases_have_references(self):
         for case in DEFAULT_CASES:
@@ -56,6 +59,20 @@ class TestRAGAsEvalCase:
         agent_case = [c for c in DEFAULT_CASES if "Agent" in c.topic][0]
         assert agent_case.difficulty == "advanced"
 
+    def test_default_cases_cover_topic_mode_and_help_assistant(self):
+        surfaces = {c.surface for c in DEFAULT_CASES}
+        assert "learn_path" in surfaces
+        assert "topic_mode" in surfaces
+        assert "help_assistant" in surfaces
+
+    def test_pending_cases_use_reviewer_facing_label_suffixes(self):
+        langgraph = [c for c in DEFAULT_CASES if c.topic == "LangGraph"][0]
+        app_help = [c for c in DEFAULT_CASES if c.topic == "How does this app work?"][0]
+        live_help = [c for c in DEFAULT_CASES if c.topic == "Difference between RAG and Agentic RAG"][0]
+        assert langgraph.label_suffix == "Topic Mode"
+        assert app_help.label_suffix == "App Workflow Context, Help Assistant"
+        assert live_help.label_suffix == "Live official docs enrichment, Help Assistant"
+
     def test_case_fields(self):
         case = RAGAsEvalCase(
             topic="Test", difficulty="beginner",
@@ -64,6 +81,7 @@ class TestRAGAsEvalCase:
         assert case.topic == "Test"
         assert case.difficulty == "beginner"
         assert case.user_input == "question"
+        assert case.surface == "topic_mode"
         assert case.reference == "answer"
 
     def test_case_optional_reference(self):
@@ -77,6 +95,7 @@ class TestRAGAsEvalCase:
 class TestRAGAsCaseResult:
     def test_default_values(self):
         r = RAGAsCaseResult(topic="t", difficulty="d")
+        assert r.surface == "topic_mode"
         assert r.faithfulness is None
         assert r.answer_relevancy is None
         assert r.context_precision is None
@@ -215,6 +234,47 @@ class TestEvaluateSingleCase:
         assert result.error is None  # metric failure != case error
 
 
+class TestEvalCaseGeneration:
+    @patch("src.services.help_assistant.get_help_assistant_app_workflow_context")
+    @patch("src.services.help_assistant.get_help_assistant_runtime_defaults")
+    @patch("src.services.help_assistant.answer_help_question")
+    def test_generate_help_assistant_content_uses_workflow_context_when_no_sources(
+        self,
+        mock_answer,
+        mock_defaults,
+        mock_app_context,
+    ):
+        from src.eval.ragas_evaluation import RAGAsEvalCase, _generate_eval_case_content
+
+        mock_defaults.return_value = {
+            "temperature": 0.15,
+            "top_p": 0.85,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "max_tokens": 1100,
+        }
+        mock_app_context.return_value = "App workflow context block."
+        mock_answer.return_value = {
+            "status": "answered",
+            "answer_markdown": "Official snapshots are local; live docs are fetched on demand.",
+            "sources": [],
+        }
+
+        content = _generate_eval_case_content(
+            RAGAsEvalCase(
+                topic="Help Assistant Official Docs Workflow",
+                difficulty="intermediate",
+                surface="help_assistant",
+                user_input="What is the difference between official snapshots and live docs enrichment?",
+                reference="reference",
+            )
+        )
+
+        assert content["answer"].startswith("Official snapshots")
+        assert content["contexts"] == ["App workflow context block."]
+        assert content["sources_count"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Test formatting
 # ---------------------------------------------------------------------------
@@ -239,7 +299,7 @@ class TestFormatReport:
         assert "Test Topic" in text
         assert "0.9500" in text
         assert "✅" in text
-        assert "(Beginner)" in text
+        assert "(Beginner, Topic Mode)" in text
 
     def test_format_with_error(self):
         report = RAGAsReport(
@@ -298,6 +358,7 @@ class TestMetricClassification:
 
     def test_answer_correctness_note_mentions_diagnostic(self):
         assert "diagnostic" in ANSWER_CORRECTNESS_NOTE.lower()
+        assert "faithfulness" in ANSWER_CORRECTNESS_NOTE.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +446,40 @@ class TestFormatReportQualityAssessment:
         assert "Context Recall" in text
         assert "⚠" in text
 
-    def test_diagnostic_note_in_report(self):
+    def test_diagnostic_note_not_rendered_in_raw_report(self):
         report = RAGAsReport(results=[])
         text = format_ragas_report(report)
-        assert "diagnostic" in text.lower()
+        assert "diagnostic" not in text.lower()
+
+    def test_format_includes_surface_label(self):
+        report = RAGAsReport(
+            results=[
+                RAGAsCaseResult(
+                    topic="Difference between RAG and Agentic RAG",
+                    difficulty="intermediate",
+                    surface="help_assistant",
+                )
+            ]
+        )
+        text = format_ragas_report(report)
+        assert "Help Assistant" in text
+
+    def test_format_with_configured_cases_shows_pending_placeholders(self):
+        report = RAGAsReport(
+            results=[
+                RAGAsCaseResult(
+                    topic="LLM Basics and Prompt Engineering",
+                    difficulty="beginner",
+                    faithfulness=0.95,
+                    answer_relevancy=0.8,
+                    context_precision=0.7,
+                    context_recall=1.0,
+                )
+            ]
+        )
+        text = format_ragas_report(report, configured_cases=DEFAULT_CASES)
+        assert "LLM Basics and Prompt Engineering (Beginner, Learn Path)" in text
+        assert "LangGraph (Topic Mode)" in text
+        assert "How does this app work? (App Workflow Context, Help Assistant)" in text
+        assert "Difference between RAG and Agentic RAG (Live official docs enrichment, Help Assistant)" in text
+        assert "Status: Pending evaluation" in text

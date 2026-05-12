@@ -38,6 +38,8 @@ class RAGAsEvalCase:
     topic: str
     difficulty: str  # beginner / intermediate / advanced
     user_input: str  # the question / learning request
+    surface: str = "topic_mode"  # topic_mode / help_assistant
+    label_suffix: str = ""
     reference: str = ""  # optional ground-truth answer for answer_correctness
 
 
@@ -49,6 +51,7 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
     RAGAsEvalCase(
         topic="LLM Basics and Prompt Engineering",
         difficulty="beginner",
+        surface="learn_path",
         user_input="Explain the fundamentals of large language models and basic prompt engineering techniques.",
         reference=(
             "Large language models are neural networks trained on large text corpora "
@@ -60,6 +63,7 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
     RAGAsEvalCase(
         topic="RAG and Vector Databases",
         difficulty="intermediate",
+        surface="learn_path",
         # Narrowed question to focus on core RAG pipeline — the previous version
         # asked about "architecture, vector databases, and embedding strategies"
         # which diluted answer relevancy because the generated guide covered many
@@ -82,6 +86,7 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
     RAGAsEvalCase(
         topic="AI Agents and Tool Calling",
         difficulty="advanced",
+        surface="learn_path",
         # Narrowed question to focus on tool calling mechanics — the previous
         # version asked broadly about "ReAct pattern for autonomous task
         # execution" which lowered context precision because the retriever
@@ -101,6 +106,49 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
             "APIs and agent orchestration for multi-step tool use loops."
         ),
     ),
+    RAGAsEvalCase(
+        topic="LangGraph",
+        difficulty="",
+        surface="topic_mode",
+        label_suffix="Topic Mode",
+        user_input=(
+            "How does LangGraph manage shared state across nodes? Explain reducers, "
+            "state updates, and why explicit state helps multi-step workflows."
+        ),
+        reference=(
+            "LangGraph keeps workflow data in an explicit shared state object. Nodes "
+            "read from that state and return updates, while reducers merge values when "
+            "multiple branches write to the same field. Explicit state makes multi-step "
+            "workflows easier to inspect, debug, and resume."
+        ),
+    ),
+    RAGAsEvalCase(
+        topic="How does this app work?",
+        difficulty="",
+        surface="help_assistant",
+        label_suffix="App Workflow Context, Help Assistant",
+        user_input=(
+            "How does this app work?"
+        ),
+        reference=(
+            "The app has Learn, Quiz, Progress, Dashboard, and Help Assistant surfaces. "
+            "Learn generates grounded study guides and Learn Paths. Quiz generates and "
+            "evaluates RAG-grounded quizzes. Progress shows saved attempts and weak areas. "
+            "Dashboard exposes observability, KB health, runtime diagnostics, and evaluation readiness."
+        ),
+    ),
+    RAGAsEvalCase(
+        topic="Difference between RAG and Agentic RAG",
+        difficulty="",
+        surface="help_assistant",
+        label_suffix="Live official docs enrichment, Help Assistant",
+        user_input="Difference between RAG and Agentic RAG",
+        reference=(
+            "RAG retrieves relevant context and then generates an answer from that retrieved evidence. "
+            "Agentic RAG adds planning or tool-using agent behavior around retrieval, such as iterative "
+            "query reformulation, branching, validation, or multi-step tool use before answering."
+        ),
+    ),
 ]
 
 
@@ -114,6 +162,7 @@ class RAGAsCaseResult:
 
     topic: str
     difficulty: str
+    surface: str = "topic_mode"
     faithfulness: float | None = None
     answer_relevancy: float | None = None
     context_precision: float | None = None
@@ -150,13 +199,15 @@ PRIMARY_METRICS = ("faithfulness", "answer_relevancy", "context_precision", "con
 DIAGNOSTIC_METRICS = ("answer_correctness",)
 
 ANSWER_CORRECTNESS_NOTE = (
-    "Answer Correctness is a **diagnostic** metric, not a primary quality indicator. "
-    "It measures alignment between the generated study guide and a short reference answer. "
-    "Scores can be artificially low because generated guides are long and comprehensive "
-    "(10 000–25 000 chars) while reference answers are intentionally short and concise. "
-    "**Faithfulness, Answer Relevancy, Context Precision, and Context Recall** are the "
-    "primary Learn quality metrics."
+    "Answer Correctness is shown as a diagnostic metric; primary RAG quality is tracked "
+    "through faithfulness, answer relevancy, context precision, and context recall."
 )
+
+SURFACE_LABELS = {
+    "learn_path": "Learn Path",
+    "topic_mode": "Topic Mode",
+    "help_assistant": "Help Assistant",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +294,47 @@ def _generate_learn_content(case: RAGAsEvalCase) -> dict[str, Any]:
     }
 
 
+def _generate_help_assistant_content(case: RAGAsEvalCase) -> dict[str, Any]:
+    """Run the Help Assistant workflow for a single evaluation case."""
+    from src.services.help_assistant import (
+        answer_help_question,
+        get_help_assistant_app_workflow_context,
+        get_help_assistant_runtime_defaults,
+    )
+
+    result = answer_help_question(
+        case.user_input,
+        personality_mode="Technical",
+        runtime_config=get_help_assistant_runtime_defaults("Technical"),
+    )
+    if result.get("status") != "answered":
+        return {
+            "answer": "",
+            "contexts": [],
+            "sources_count": 0,
+            "error": result.get("message") or f"Help Assistant status={result.get('status')}",
+        }
+
+    source_rows = result.get("sources", []) or []
+    contexts = [str(row.get("Snippet", "")).strip() for row in source_rows if str(row.get("Snippet", "")).strip()]
+    if not contexts:
+        contexts = [get_help_assistant_app_workflow_context()]
+
+    return {
+        "answer": str(result.get("answer_markdown", "")).strip(),
+        "contexts": contexts,
+        "sources_count": len(source_rows) if source_rows else 1,
+        "error": None,
+    }
+
+
+def _generate_eval_case_content(case: RAGAsEvalCase) -> dict[str, Any]:
+    """Dispatch one evaluation case to the correct app surface."""
+    if case.surface == "help_assistant":
+        return _generate_help_assistant_content(case)
+    return _generate_learn_content(case)
+
+
 async def _evaluate_single_case(
     case: RAGAsEvalCase,
     content: dict[str, Any],
@@ -260,6 +352,7 @@ async def _evaluate_single_case(
     result = RAGAsCaseResult(
         topic=case.topic,
         difficulty=case.difficulty,
+        surface=case.surface,
         num_contexts=len(content["contexts"]),
         answer_length=len(content["answer"]),
     )
@@ -342,6 +435,53 @@ def _compute_averages(results: list[RAGAsCaseResult]) -> dict[str, float | None]
     return averages
 
 
+def _get_configured_case_map(
+    configured_cases: list[RAGAsEvalCase] | None = None,
+) -> dict[str, RAGAsEvalCase]:
+    """Return configured evaluation cases keyed by topic."""
+    cases = configured_cases or DEFAULT_CASES
+    return {case.topic: case for case in cases}
+
+
+def _resolve_case_surface_label(
+    topic: str,
+    *,
+    surface: str | None = None,
+    configured_cases: list[RAGAsEvalCase] | None = None,
+) -> str:
+    """Resolve the reviewer-facing surface label for one case."""
+    configured = _get_configured_case_map(configured_cases).get(topic)
+    if configured and configured.label_suffix:
+        return configured.label_suffix
+    resolved_surface = configured.surface if configured is not None else (surface or "")
+    return SURFACE_LABELS.get(resolved_surface, "")
+
+
+def _format_case_display_label(
+    topic: str,
+    *,
+    difficulty: str = "",
+    surface: str | None = None,
+    configured_cases: list[RAGAsEvalCase] | None = None,
+) -> str:
+    """Return the reviewer-facing label suffix for one configured or evaluated case."""
+    configured = _get_configured_case_map(configured_cases).get(topic)
+    if configured and configured.label_suffix:
+        return configured.label_suffix
+
+    parts: list[str] = []
+    if difficulty:
+        parts.append(difficulty.capitalize())
+    surface_label = _resolve_case_surface_label(
+        topic,
+        surface=surface,
+        configured_cases=configured_cases,
+    )
+    if surface_label:
+        parts.append(surface_label)
+    return ", ".join(parts)
+
+
 def run_ragas_evaluation(
     cases: list[RAGAsEvalCase] | None = None,
     model: str = "gpt-4o-mini",
@@ -392,10 +532,11 @@ def run_ragas_evaluation(
     contents: list[dict[str, Any]] = []
     for case in cases:
         logger.info("  Generating: {} ({})", case.topic, case.difficulty)
-        content = _generate_learn_content(case)
+        content = _generate_eval_case_content(case)
         contents.append(content)
         logger.info(
-            "    → {} contexts, {} chars answer{}",
+            "    → {} [{}] contexts, {} chars answer{}",
+            case.surface,
             len(content["contexts"]),
             len(content["answer"]),
             f" ERROR: {content['error']}" if content.get("error") else "",
@@ -442,7 +583,11 @@ def run_ragas_evaluation(
     return report
 
 
-def format_ragas_report(report: RAGAsReport) -> str:
+def format_ragas_report(
+    report: RAGAsReport,
+    *,
+    configured_cases: list[RAGAsEvalCase] | None = None,
+) -> str:
     """Format RAGAs evaluation report as readable text."""
     lines = [
         "=" * 60,
@@ -451,26 +596,49 @@ def format_ragas_report(report: RAGAsReport) -> str:
         "",
     ]
 
-    for r in report.results:
-        difficulty_label = (r.difficulty or "").capitalize() or "Unknown"
-        lines.append(f"--- {r.topic} ({difficulty_label}) ---")
-        if r.error:
-            lines.append(f"  ERROR: {r.error}")
+    result_by_topic = {result.topic: result for result in report.results}
+    configured = configured_cases or []
+
+    def _append_case_block(topic: str, difficulty: str, result: RAGAsCaseResult | None) -> None:
+        label_detail = _format_case_display_label(
+            topic,
+            difficulty=difficulty,
+            surface=getattr(result, "surface", None) if result is not None else None,
+            configured_cases=configured_cases,
+        )
+        if label_detail:
+            lines.append(f"--- {topic} ({label_detail}) ---")
         else:
-            lines.append(f"  Contexts: {r.num_contexts}  |  Answer length: {r.answer_length} chars")
-            lines.append(f"  Faithfulness:       {_fmt(r.faithfulness)}")
-            lines.append(f"  Answer Relevancy:   {_fmt(r.answer_relevancy)}")
-            lines.append(f"  Context Precision:  {_fmt(r.context_precision)}")
-            lines.append(f"  Context Recall:     {_fmt(r.context_recall)}")
-            lines.append(f"  Answer Correctness: {_fmt(r.answer_correctness)}")
+            lines.append(f"--- {topic} ---")
+
+        if result is None:
+            lines.append("  Status: Pending evaluation")
+            lines.append("  Run a fresh benchmark to generate metrics.")
+        elif result.error:
+            lines.append(f"  ERROR: {result.error}")
+        else:
+            lines.append(f"  Contexts: {result.num_contexts}  |  Answer length: {result.answer_length} chars")
+            lines.append(f"  Faithfulness:       {_fmt(result.faithfulness)}")
+            lines.append(f"  Answer Relevancy:   {_fmt(result.answer_relevancy)}")
+            lines.append(f"  Context Precision:  {_fmt(result.context_precision)}")
+            lines.append(f"  Context Recall:     {_fmt(result.context_recall)}")
         lines.append("")
+
+    if configured:
+        for case in configured:
+            _append_case_block(case.topic, case.difficulty, result_by_topic.get(case.topic))
+        for result in report.results:
+            if result.topic not in {case.topic for case in configured}:
+                _append_case_block(result.topic, result.difficulty, result)
+    else:
+        for result in report.results:
+            _append_case_block(result.topic, result.difficulty, result)
 
     lines.append("--- Averages ---")
     lines.append(f"  Faithfulness:       {_fmt(report.avg_faithfulness)}")
     lines.append(f"  Answer Relevancy:   {_fmt(report.avg_answer_relevancy)}")
     lines.append(f"  Context Precision:  {_fmt(report.avg_context_precision)}")
     lines.append(f"  Context Recall:     {_fmt(report.avg_context_recall)}")
-    lines.append(f"  Answer Correctness: {_fmt(report.avg_answer_correctness)}")
     lines.append("")
 
     # Quality assessment (primary metrics only)
@@ -490,9 +658,6 @@ def format_ragas_report(report: RAGAsReport) -> str:
         lines.append("  ✅ All primary metrics above threshold — Learn quality is acceptable.")
     else:
         lines.append("  ❌ Some primary metrics below threshold — review recommended.")
-    lines.append("")
-    lines.append("Note: Answer Correctness is diagnostic only (reference-alignment for")
-    lines.append("long study guides vs short references). See primary metrics above.")
 
     lines.append("")
     return "\n".join(lines)

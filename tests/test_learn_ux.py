@@ -432,7 +432,10 @@ class TestSidebarNavigation:
         with open("app.py") as f:
             source = f.read()
         assert '"Home"' in source
+        assert '"Help Assistant"' in source
         assert '"Dashboard"' in source
+        assert '"Quick Help"' not in source
+        assert source.index('"Dashboard"') < source.index('"Help Assistant"')
         assert "Intro" not in source
 
     def test_app_name_is_consistent(self):
@@ -975,17 +978,20 @@ class TestSidebarStatus:
         kb_status = 'st.caption(f"KB Index: {_kb_status}")'
         external_docs = 'st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")'
         ragas_status = 'st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")'
+        help_assistant_style = 'f"Agent Personality: "'
         model_line = 'st.caption(f"Model: {_s.app_default_model}")'
         assert source.index(runtime_info) < source.index(kb_status)
         assert source.index(kb_status) < source.index(external_docs)
         assert source.index(external_docs) < source.index(ragas_status)
-        assert source.index(ragas_status) < source.index(model_line)
+        assert source.index(ragas_status) < source.index(help_assistant_style)
+        assert source.index(help_assistant_style) < source.index(model_line)
 
     def test_sidebar_has_external_docs_and_ragas_status(self):
         with open("app.py") as f:
             source = f.read()
         assert "Official Docs Sync:" in source
         assert "RAGAs Evaluation:" in source
+        assert "Agent Personality:" in source
         assert "Not updated" in source
         assert "Passed" in source
         assert "Needs review" in source
@@ -1482,11 +1488,10 @@ class TestDashboardStructure:
             "_display_external_docs_updater_section()"
         )
 
-    def test_dashboard_highlights_project_strengths(self):
+    def test_dashboard_removes_project_strengths_block(self):
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
-        assert "**Project Strengths**" in source
-        assert "Cached RAGAs benchmark" in source
+        assert "**Project Strengths**" not in source
 
     def test_dashboard_uses_snapshot_metrics(self):
         with open("src/ui/dashboard_page.py") as f:
@@ -1566,6 +1571,153 @@ class TestDashboardStructure:
             source = f.read()
         assert "deduplicated by source file in this view" in source
         assert "displayed after deduplication by source file" in source
+
+
+class TestHelpAssistantUi:
+    """Help pages should expose scoped guidance and live-doc wording."""
+
+    def test_help_page_has_scoped_assistant_copy(self):
+        with open("src/ui/help_page.py") as f:
+            source = f.read()
+        assert 'st.header("Help Assistant")' in source
+        assert "approved live official docs" in source
+        assert "In-domain only." in source
+        assert '"Ask Help Assistant"' in source
+        assert '"Clear chat"' in source
+        assert '"Agent Personality"' in source
+        assert 'st.session_state.setdefault("help_assistant_personality_mode", "Technical")' in source
+        assert "_render_help_style_selector()" in source
+        assert "_render_help_advanced_settings()" in source
+        assert 'key=f"help_assistant_style_{mode.lower()}"' in source
+        assert "st.selectbox(" not in source
+        assert 'key="help_assistant_draft_question"' in source
+        assert '"Advanced Model Settings"' in source
+        assert 'key="help_assistant_temperature"' in source
+        assert 'key="help_assistant_top_p"' in source
+        assert 'key="help_assistant_frequency_penalty"' in source
+        assert 'key="help_assistant_presence_penalty"' in source
+        assert 'key="help_assistant_max_tokens"' in source
+        assert "Controls creativity/randomness." in source
+        assert "Controls nucleus sampling." in source
+        assert "Reduces repetition by penalizing tokens that already appeared frequently." in source
+        assert "Encourages introducing new concepts instead of repeating existing topics." in source
+        assert "Maximum length of the generated response." in source
+        assert 'key="help_assistant_submit"' in source
+        assert 'key="help_assistant_clear_chat"' in source
+        assert 'st.caption(_format_help_runtime_summary(runtime_config))' not in source
+        assert 'st.session_state["help_assistant_reset_draft"] = True' in source
+        assert 'st.session_state.pop("help_assistant_reset_draft", False)' in source
+        assert "_validate_help_submit(draft_question)" in source
+        assert 'input_feedback.warning(feedback_message)' in source
+        assert 'input_feedback.error(feedback_message)' in source
+        assert 'key="help_assistant_question"' not in source
+        assert 'st.spinner("Grounding answer with local KB and approved live official docs...")' not in source
+        assert "Current Help Assistant responses are generated as one atomic OpenAI call" not in source
+        submit_block = source[source.index("if submit:"):]
+        assert 'st.session_state["help_assistant_draft_question"] = ""' not in submit_block
+        assert submit_block.index("if feedback_message:") < submit_block.index("_append_help_chat_turn(result)")
+        assert "action_cols = st.columns([7, 3])" in source
+        assert 'clear_chat = st.form_submit_button(' in source
+        assert source.index('submit = st.form_submit_button(') < source.index('clear_chat = st.form_submit_button(')
+
+    def test_help_page_renders_history_before_input_form(self):
+        with open("src/ui/help_page.py") as f:
+            source = f.read()
+        history_loop = "for turn in history:\n            _render_help_turn(turn)"
+        form_block = 'with st.form("help_assistant_form"):'
+        assert source.index(history_loop) < source.index(form_block)
+
+    def test_help_page_uses_grouped_source_expanders(self):
+        with open("src/ui/help_page.py") as f:
+            source = f.read()
+        assert '"Grounded KB sources"' in source
+        assert '"Live official docs enrichment"' in source
+        assert '"App workflow context"' in source
+        assert '"Conversation context"' in source
+        assert '"Request Trace"' in source
+        assert '"Execution Trace"' in source
+        assert '"Raw debug events"' in source
+        assert 'st.chat_message("user", avatar="🧑‍💻")' in source
+        assert 'st.chat_message("assistant", avatar="🤖")' in source
+        assert "Agent Personality:" in source
+        assert "personality_label" in source
+        assert "Answered from app workflow / live-docs policy context." in source
+        assert 'st.caption(f"Location: {row[\'Location\']}")' in source
+        assert "_format_help_trace_entries" in source
+        assert "_format_help_execution_trace" in source
+        assert 'st.markdown(entry.replace("\\n", "  \\n"))' in source
+        assert "Scope check: passed" in source
+        assert 'elif "select_live_sources:" in lower and "selected=" in lower:' in source
+        assert source.index('"Execution Trace"') < source.index('"Raw debug events"')
+
+    def test_sidebar_help_expander_has_help_assistant_guidance_and_examples(self):
+        with open("app.py") as f:
+            source = f.read()
+        assert "**5. Help Assistant**" in source
+        assert "Scoped AI engineering help for this app." in source
+        assert "get_help_assistant_example_groups" in source
+        assert "queue_help_assistant_question(prompt)" in source
+        assert "**5. LangSmith**" not in source
+        assert "LangSmith tracing" in source
+        with open("src/services/help_assistant.py") as f:
+            service_source = f.read()
+        assert '"App workflow"' in service_source
+        assert '"Core AI / KB concepts"' in service_source
+        assert '"Official docs / live enrichment"' in service_source
+        assert "How does this app work?" in service_source
+        assert "How does KB index work?" in service_source
+        assert "When does Help Assistant use live official docs?" in service_source
+        assert "What do OpenAI structured outputs require?" in service_source
+        assert "How do LangGraph reducers work?" in service_source
+        assert "What does LangSmith tracing capture?" in service_source
+
+    def test_dashboard_has_help_assistant_summary_section(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert 'st.subheader("Help Assistant")' in source
+        assert 'st.session_state.get("help_assistant_personality_mode", "Technical")' in source
+        assert 'get_help_assistant_runtime_defaults(personality_mode)' in source
+        assert 'summary_cols = st.columns(2)' in source
+        assert "| Domain Guard | Enabled |" in source
+        assert "| Live Docs Scope | Approved official docs only |" in source
+        assert "| Session Chat Memory | Enabled |" in source
+        assert "| Agent Personality |" in source
+        assert "| Session Turns |" in source
+        assert "| Recent Context Window | Last 5 turns |" in source
+        assert "| Runtime Sampling |" in source
+        assert "| Live Enrichment | Available |" in source
+        assert "| Source Provenance | Grouped KB + Live |" in source
+        assert "| Empty Submit Handling | Banner only, not stored |" in source
+        assert '"##### Agent Personality Profiles"' in source
+        assert "| Dimension | Technical | Concise | Friendly | Formal |" in source
+        assert "Current runtime values: Temperature=" not in source
+        assert "Learn Path: {learn_path_evaluated} cached evaluated case(s)" in source
+        assert "Topic Mode: {len(topic_mode_topics)} configured pending case" in source
+        assert "Help Assistant: {len(help_topics)} configured pending case(s)" in source
+        assert "Pending cases will be scored after running a fresh RAGAs evaluation." in source
+
+    def test_dashboard_uses_neutral_answer_correctness_caption(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert 'st.markdown("#### Diagnostic Metric")' not in source
+        assert '("Answer Correctness", "answer_correctness", result.answer_correctness)' in source
+        assert "Low Answer Correctness usually reflects mismatch" not in source
+
+    def test_help_assistant_service_uses_five_turn_context_window(self):
+        with open("src/services/help_assistant.py") as f:
+            source = f.read()
+        assert "def _format_conversation_context(history: list[dict[str, Any]], max_turns: int = 5)" in source
+
+    def test_dashboard_places_help_assistant_after_token_and_cost_tracking(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        render_block = source[source.index("def render_advanced()"):]
+        assert render_block.index('st.subheader("Token and Cost Tracking")') < render_block.index(
+            "_display_help_assistant_section()"
+        )
+        assert render_block.index("_display_help_assistant_section()") < render_block.index(
+            "_display_kb_health_section()"
+        )
 
 
 class TestUsageRecordAccumulation:
