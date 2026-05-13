@@ -25,6 +25,7 @@ from src.ui.shared import (
     _display_feedback_widget,
     _display_memory_section,
     _display_sources_section,
+    _trim_snippet_to_sentence,
 )
 
 
@@ -57,6 +58,123 @@ def _show_cached_learn_result() -> None:
     _display_learn_result(result, depth=depth, mode=mode, stream=False, feedback_topic=feedback_topic)
 
 
+def _get_learn_progress_title(
+    *,
+    result: dict,
+    guide: StudyGuide | None,
+    mode: str,
+    feedback_topic: str,
+) -> str:
+    """Return a reviewer-friendly title for one saved Learn study event."""
+    if mode == "Learn Path":
+        difficulty = (guide.difficulty if guide else result.get("difficulty"))
+        if difficulty is not None:
+            level_label = difficulty.value.capitalize() if hasattr(difficulty, "value") else str(difficulty)
+            return _LEARN_PATH_DISPLAY_NAMES.get(level_label, result.get("topic", "Learn Path"))
+    return feedback_topic or (guide.topic if guide else result.get("topic", "Learn Topic"))
+
+
+def _build_learn_feedback_context(
+    result: dict,
+    *,
+    guide: StudyGuide | None,
+    mode: str,
+    depth: str,
+    feedback_topic: str,
+) -> tuple[str, dict[str, str], str]:
+    """Return the persisted title, metadata, and session signature for Learn feedback."""
+    title = _get_learn_progress_title(
+        result=result,
+        guide=guide,
+        mode=mode,
+        feedback_topic=feedback_topic,
+    )
+    difficulty = ""
+    if mode == "Learn Path":
+        diff = guide.difficulty if guide else result.get("difficulty")
+        if diff is not None:
+            difficulty = diff.value.capitalize() if hasattr(diff, "value") else str(diff)
+
+    signature_parts = [mode, difficulty, title, depth]
+    signature = " | ".join(part for part in signature_parts if part)
+
+    metadata = {
+        "learning_mode": mode,
+        "learning_depth": depth,
+        "difficulty": difficulty,
+        "context_title": title,
+        "result_signature": signature,
+    }
+    return title, metadata, signature
+
+
+def _display_progress_save_section(
+    result: dict,
+    *,
+    guide: StudyGuide | None,
+    mode: str,
+    depth: str,
+    feedback_topic: str,
+) -> None:
+    """Allow users to explicitly persist a Learn study session to Progress."""
+    st.markdown("#### Save to Progress")
+    title = _get_learn_progress_title(
+        result=result,
+        guide=guide,
+        mode=mode,
+        feedback_topic=feedback_topic,
+    )
+    signature = f"{title}|{mode}|{depth}"
+    saved_signatures = st.session_state.setdefault("learn_progress_saved_signatures", [])
+    difficulty = guide.difficulty.value.capitalize() if guide and getattr(guide, "difficulty", None) else ""
+
+    if signature in saved_signatures:
+        st.success("✅ Saved to Progress.")
+        return
+
+    from src.memory.memory_service import has_completed_learn_session
+
+    if has_completed_learn_session(
+        title,
+        learning_mode=mode,
+        learning_depth=depth,
+        difficulty=difficulty,
+    ):
+        st.success("✅ Already marked as studied.")
+        return
+
+    st.caption(
+        "Mark this Learn result as studied so Progress and Dashboard signals update before any quiz is saved."
+    )
+
+    button_key = f"btn_mark_studied_{_heading_to_anchor(signature)}"
+    if st.button("Mark as Studied", key=button_key):
+        from src.memory.memory_service import save_learning_event
+
+        summary = ""
+        if guide and guide.summary:
+            summary = _trim_snippet_to_sentence(re.sub(r"\s+", " ", guide.summary).strip(), max_len=220)
+        metadata = {
+            "source": "learn_studied",
+            "learning_mode": mode,
+            "learning_depth": depth,
+            "difficulty": difficulty,
+            "summary": summary,
+        }
+        try:
+            save_learning_event(
+                topic=title,
+                score=0.0,
+                weak_areas=[],
+                metadata=metadata,
+            )
+        except Exception:
+            st.error("Could not save this Learn result to Progress.")
+            return
+        saved_signatures.append(signature)
+        st.rerun()
+
+
 def _display_learn_result(result: dict, *, depth: str, mode: str,
                           stream: bool = False, render_guide: bool = True,
                           feedback_topic: str = "") -> None:
@@ -77,6 +195,8 @@ def _display_learn_result(result: dict, *, depth: str, mode: str,
     _display_learn_result_extras(
         result,
         guide=guide,
+        depth=depth,
+        mode=mode,
         feedback_topic=feedback_topic or result.get("topic", ""),
     )
 
@@ -85,6 +205,8 @@ def _display_learn_result_extras(
     result: dict,
     *,
     guide: StudyGuide | None,
+    depth: str,
+    mode: str,
     feedback_topic: str,
 ) -> None:
     """Render Learn post-result sections strictly after the study guide."""
@@ -93,16 +215,38 @@ def _display_learn_result_extras(
         _display_sources_section(guide)
 
     st.markdown("---")
-    st.markdown("#### Personalization")
-    _display_memory_section(result)
-
-    st.markdown("---")
     st.markdown("#### Workflow Trace")
     _display_debug_trace(result, "Learn Workflow Trace")
 
     st.markdown("---")
+    st.markdown("#### Personalization")
+    _display_memory_section(result)
+
+    st.markdown("---")
+    _display_progress_save_section(
+        result,
+        guide=guide,
+        mode=mode,
+        depth=depth,
+        feedback_topic=feedback_topic,
+    )
+
+    st.markdown("---")
     st.markdown("#### Feedback")
-    _display_feedback_widget("learn", feedback_topic, expanded=True)
+    feedback_title, feedback_metadata, feedback_signature = _build_learn_feedback_context(
+        result,
+        guide=guide,
+        mode=mode,
+        depth=depth,
+        feedback_topic=feedback_topic,
+    )
+    _display_feedback_widget(
+        "learn",
+        feedback_title,
+        expanded=True,
+        metadata=feedback_metadata,
+        result_signature=feedback_signature,
+    )
 
 
 def _has_cache_hit(result: dict) -> bool:

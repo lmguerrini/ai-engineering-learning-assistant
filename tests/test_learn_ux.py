@@ -548,6 +548,33 @@ class TestMemoryEmptyState:
         info = format_memory_transparency(profile)
         assert info["loaded"] is True
 
+    def test_profile_with_feedback_summary_only_is_loaded(self):
+        profile = {
+            "feedback_summary": {
+                "average_rating": 3.5,
+                "total_count": 2,
+                "suggestion": "increase_difficulty",
+            }
+        }
+        info = format_memory_transparency(profile)
+        assert info["loaded"] is True
+        assert info["feedback_total_count"] == 2
+        assert info["feedback_average_rating"] == 3.5
+        assert info["feedback_suggestion"] == "increase_difficulty"
+
+    def test_profile_with_completed_learn_sessions_only_is_loaded(self):
+        profile = {
+            "completed_learn_sessions": [
+                {
+                    "topic": "Foundations of LLM Application Development",
+                    "metadata": {"learning_depth": "Summary"},
+                }
+            ]
+        }
+        info = format_memory_transparency(profile)
+        assert info["loaded"] is True
+        assert len(info["completed_learn_sessions"]) == 1
+
 
 class TestPromptCodeBlockRules:
     """Deep study prompts must contain the strict code block rule."""
@@ -671,6 +698,101 @@ class TestMemoryLoadedState:
         mem = format_memory_transparency(profile)
         assert mem["loaded"]
         assert mem["recent_topics"] == ["AI Agents"]
+
+
+class TestLearnMemoryProfileRendering:
+    """Learn memory/profile should reflect persisted global memory, not only result-local state."""
+
+    @patch("src.ui.shared.st")
+    @patch("src.memory.feedback_service.get_feedback_summary")
+    @patch("src.memory.memory_service.get_completed_learn_sessions")
+    @patch("src.memory.memory_service.get_user_profile_summary")
+    def test_memory_section_renders_persisted_completed_sessions_and_feedback(
+        self,
+        mock_get_profile,
+        mock_get_completed,
+        mock_get_feedback,
+        mock_st,
+    ):
+        from unittest.mock import MagicMock
+
+        from src.ui.shared import _display_memory_section
+
+        mock_st.expander.return_value.__enter__ = MagicMock()
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_get_profile.return_value = {
+            "recent_topics": ["Foundations of LLM Application Development"],
+            "recurring_weak_areas": [],
+            "average_score": None,
+            "preferred_style": None,
+            "suggested_focus_topics": [],
+        }
+        mock_get_completed.return_value = [
+            {
+                "topic": "Foundations of LLM Application Development",
+                "metadata": {"learning_depth": "Summary"},
+            }
+        ]
+        mock_get_feedback.return_value = {
+            "average_rating": 3.5,
+            "total_count": 2,
+            "low_rating_count": 0,
+            "high_rating_count": 1,
+            "mentions_too_easy": True,
+            "mentions_too_hard": False,
+            "suggestion": "increase_difficulty",
+        }
+
+        _display_memory_section({"memory_profile": {}})
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list]
+        assert "**Completed Learn sessions:** Foundations of LLM Application Development (Summary)" in markdown_calls
+        assert "**Feedback entries:** 2 · Average rating: 3.5/5 · Current signal: Increase difficulty" in markdown_calls
+        assert "**Quiz performance:** No saved quiz performance yet" in markdown_calls
+        assert "**Recent topics:** Foundations of LLM Application Development" in markdown_calls
+        mock_st.info.assert_not_called()
+
+    @patch("src.ui.shared.st")
+    @patch("src.memory.feedback_service.get_feedback_summary")
+    @patch("src.memory.memory_service.get_completed_learn_sessions")
+    @patch("src.memory.memory_service.get_user_profile_summary")
+    def test_memory_section_distinguishes_no_quiz_performance_from_no_memory(
+        self,
+        mock_get_profile,
+        mock_get_completed,
+        mock_get_feedback,
+        mock_st,
+    ):
+        from unittest.mock import MagicMock
+
+        from src.ui.shared import _display_memory_section
+
+        mock_st.expander.return_value.__enter__ = MagicMock()
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_get_profile.return_value = {
+            "recent_topics": [],
+            "recurring_weak_areas": [],
+            "average_score": None,
+            "preferred_style": None,
+            "suggested_focus_topics": [],
+        }
+        mock_get_completed.return_value = []
+        mock_get_feedback.return_value = {
+            "average_rating": 4.0,
+            "total_count": 1,
+            "low_rating_count": 0,
+            "high_rating_count": 1,
+            "mentions_too_easy": False,
+            "mentions_too_hard": False,
+            "suggestion": None,
+        }
+
+        _display_memory_section({"memory_profile": {}})
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list]
+        assert "**Feedback entries:** 1 · Average rating: 4.0/5" in markdown_calls
+        assert "**Quiz performance:** No saved quiz performance yet" in markdown_calls
+        mock_st.info.assert_not_called()
 
 
 class TestOutputTitles:
@@ -962,6 +1084,7 @@ class TestLearnStreamingHelpers:
         with patch("src.ui.learn_page._display_study_guide") as display_guide, \
              patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
+             patch("src.ui.learn_page._display_progress_save_section") as display_progress, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
             _display_learn_result(
@@ -981,8 +1104,24 @@ class TestLearnStreamingHelpers:
         )
         display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
+        display_progress.assert_called_once_with(
+            result,
+            guide=guide,
+            mode="Topic",
+            depth="Deep Study",
+            feedback_topic="AI Agents",
+        )
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
-        display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
+        display_feedback.assert_called_once()
+        feedback_args = display_feedback.call_args.args
+        feedback_kwargs = display_feedback.call_args.kwargs
+        assert feedback_args[:2] == ("learn", "AI Agents")
+        assert feedback_kwargs["expanded"] is True
+        assert feedback_kwargs["metadata"]["learning_mode"] == "Topic"
+        assert feedback_kwargs["metadata"]["learning_depth"] == "Deep Study"
+        assert feedback_kwargs["metadata"]["context_title"] == "AI Agents"
+        assert feedback_kwargs["metadata"]["result_signature"] == "Topic | AI Agents | Deep Study"
+        assert feedback_kwargs["result_signature"] == "Topic | AI Agents | Deep Study"
 
     def test_display_learn_result_extras_uses_distinct_section_headings(self):
         from unittest.mock import patch
@@ -1001,9 +1140,16 @@ class TestLearnStreamingHelpers:
         with patch("src.ui.learn_page.st.markdown") as markdown, \
              patch("src.ui.learn_page._display_sources_section") as display_sources, \
              patch("src.ui.learn_page._display_memory_section") as display_memory, \
+             patch("src.ui.learn_page._display_progress_save_section") as display_progress, \
              patch("src.ui.learn_page._display_debug_trace") as display_trace, \
              patch("src.ui.learn_page._display_feedback_widget") as display_feedback:
-            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
+            _display_learn_result_extras(
+                result,
+                guide=guide,
+                depth="Deep Study",
+                mode="Topic",
+                feedback_topic="AI Agents",
+            )
 
         headings = [call.args[0] for call in markdown.call_args_list]
         assert "#### Personalization" in headings
@@ -1011,8 +1157,22 @@ class TestLearnStreamingHelpers:
         assert "#### Feedback" in headings
         display_sources.assert_called_once_with(guide)
         display_memory.assert_called_once_with(result)
+        display_progress.assert_called_once_with(
+            result,
+            guide=guide,
+            mode="Topic",
+            depth="Deep Study",
+            feedback_topic="AI Agents",
+        )
         display_trace.assert_called_once_with(result, "Learn Workflow Trace")
-        display_feedback.assert_called_once_with("learn", "AI Agents", expanded=True)
+        display_feedback.assert_called_once()
+        feedback_args = display_feedback.call_args.args
+        feedback_kwargs = display_feedback.call_args.kwargs
+        assert feedback_args[:2] == ("learn", "AI Agents")
+        assert feedback_kwargs["expanded"] is True
+        assert feedback_kwargs["metadata"]["learning_mode"] == "Topic"
+        assert feedback_kwargs["metadata"]["result_signature"] == "Topic | AI Agents | Deep Study"
+        assert feedback_kwargs["result_signature"] == "Topic | AI Agents | Deep Study"
 
     def test_display_learn_result_extras_renders_sources_before_other_sections(self):
         from unittest.mock import patch
@@ -1036,15 +1196,24 @@ class TestLearnStreamingHelpers:
             "src.ui.learn_page._display_memory_section",
             side_effect=lambda _: order.append("memory"),
         ), patch(
+            "src.ui.learn_page._display_progress_save_section",
+            side_effect=lambda *_args, **_kwargs: order.append("progress"),
+        ), patch(
             "src.ui.learn_page._display_debug_trace",
             side_effect=lambda *_args: order.append("trace"),
         ), patch(
             "src.ui.learn_page._display_feedback_widget",
             side_effect=lambda *_args, **_kwargs: order.append("feedback"),
         ):
-            _display_learn_result_extras(result, guide=guide, feedback_topic="AI Agents")
+            _display_learn_result_extras(
+                result,
+                guide=guide,
+                depth="Deep Study",
+                mode="Topic",
+                feedback_topic="AI Agents",
+            )
 
-        assert order == ["sources", "memory", "trace", "feedback"]
+        assert order == ["sources", "trace", "memory", "progress", "feedback"]
 
 
 class TestLearnProgressiveStreamingToggle:
@@ -1073,8 +1242,19 @@ class TestLearnResultLayoutPolish:
     def test_learn_page_feedback_is_rendered_with_result_extras(self):
         with open("src/ui/learn_page.py") as f:
             source = f.read()
-        assert '_display_feedback_widget("learn", feedback_topic, expanded=True)' in source
+        assert '_display_feedback_widget(' in source
+        assert '"learn",' in source
+        assert 'metadata=feedback_metadata' in source
+        assert 'result_signature=feedback_signature' in source
         assert '_display_feedback_widget("learn", st.session_state.get("last_learn_topic", ""))' not in source
+
+    def test_learn_page_progress_save_section_is_rendered_with_result_extras(self):
+        with open("src/ui/learn_page.py") as f:
+            source = f.read()
+        assert "_display_progress_save_section(" in source
+        assert '"#### Save to Progress"' in source
+        assert '"Mark as Studied"' in source
+        assert '"✅ Saved to Progress."' in source
 
     def test_shared_feedback_widget_supports_expanded_flag(self):
         import inspect
@@ -1083,6 +1263,13 @@ class TestLearnResultLayoutPolish:
         source = inspect.getsource(_display_feedback_widget)
         assert "expanded: bool = False" in source
         assert "st.expander(f\"Rate this {context_type} experience\", expanded=expanded)" in source
+        assert 'st.rerun()' in source
+        assert 'topic_key = re.sub(r"[^a-z0-9]+", "_", topic.lower()).strip("_") or "topic"' in source
+        assert 'result_signature: str | None = None' in source
+        assert 'metadata: dict[str, Any] | None = None' in source
+        assert 'has_feedback_for_result(context_type, topic, metadata=feedback_metadata)' in source
+        assert '"✅ Feedback saved. Thank you!"' in source
+        assert '"✅ Feedback already submitted for this result."' in source
 
     def test_memory_profile_expander_stays_collapsed_by_default(self):
         import inspect
@@ -1090,6 +1277,141 @@ class TestLearnResultLayoutPolish:
 
         source = inspect.getsource(_display_memory_section)
         assert 'st.expander("Memory Profile", expanded=False)' in source
+
+    @patch("src.ui.shared.st")
+    @patch("src.memory.feedback_service.save_feedback")
+    def test_feedback_widget_reruns_immediately_after_submit(self, mock_save_feedback, mock_st):
+        from unittest.mock import MagicMock
+
+        from src.ui.shared import _display_feedback_widget
+
+        mock_st.session_state = {}
+        mock_st.expander.return_value.__enter__ = MagicMock()
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.slider.return_value = 5
+        mock_st.text_input.return_value = "Helpful"
+        mock_st.button.return_value = True
+
+        _display_feedback_widget("learn", "AI Agents", expanded=True)
+
+        mock_save_feedback.assert_called_once_with(
+            context_type="learn",
+            topic="AI Agents",
+            rating=5,
+            comment="Helpful",
+            metadata={},
+        )
+        status_keys = [key for key, value in mock_st.session_state.items() if key.endswith("_status") and value]
+        assert len(status_keys) == 1
+        assert "ai_agents" in status_keys[0]
+        assert mock_st.session_state[status_keys[0]] == "just_saved"
+        mock_st.rerun.assert_called_once()
+
+    @patch("src.ui.shared.st")
+    def test_feedback_widget_hides_form_after_current_result_submission(self, mock_st):
+        from src.ui.shared import _display_feedback_widget
+
+        mock_st.session_state = {
+            "fb_learn_ai_agents_ai_agents_status": "submitted",
+        }
+
+        _display_feedback_widget("learn", "AI Agents", expanded=True)
+
+        mock_st.success.assert_called_once_with("✅ Feedback already submitted for this result.")
+        mock_st.expander.assert_not_called()
+
+    @patch("src.ui.shared.st")
+    @patch("src.memory.feedback_service.has_feedback_for_result", return_value=True)
+    def test_feedback_widget_hides_form_after_persisted_duplicate(self, mock_has_feedback, mock_st):
+        from src.ui.shared import _display_feedback_widget
+
+        mock_st.session_state = {}
+
+        _display_feedback_widget(
+            "learn",
+            "AI Agents",
+            expanded=True,
+            metadata={"learning_mode": "Topic", "learning_depth": "Deep Study"},
+            result_signature="Topic | AI Agents | Deep Study",
+        )
+
+        mock_has_feedback.assert_called_once()
+        mock_st.success.assert_called_once_with("✅ Feedback already submitted for this result.")
+        assert mock_st.session_state["fb_learn_ai_agents_topic_ai_agents_deep_study_status"] == "submitted"
+        mock_st.expander.assert_not_called()
+
+    @patch("src.ui.learn_page.st")
+    @patch("src.memory.memory_service.save_learning_event")
+    def test_mark_as_studied_saves_progress_and_reruns(self, mock_save_learning_event, mock_st):
+        from unittest.mock import MagicMock
+
+        from src.ui.learn_page import _display_progress_save_section
+
+        guide = StudyGuide(
+            topic="AI Agents",
+            difficulty=DifficultyLevel.INTERMEDIATE,
+            summary="Focused review of agents, retrieval boundaries, and orchestration tradeoffs.",
+            key_concepts=[],
+            detailed_notes="## Notes\nBody",
+        )
+        mock_st.session_state = {}
+        mock_st.button.return_value = True
+
+        _display_progress_save_section(
+            {"topic": "AI Agents"},
+            guide=guide,
+            mode="Topic",
+            depth="Deep Study",
+            feedback_topic="AI Agents",
+        )
+
+        mock_save_learning_event.assert_called_once()
+        kwargs = mock_save_learning_event.call_args.kwargs
+        assert kwargs["topic"] == "AI Agents"
+        assert kwargs["score"] == 0.0
+        assert kwargs["weak_areas"] == []
+        assert kwargs["metadata"]["source"] == "learn_studied"
+        assert kwargs["metadata"]["learning_mode"] == "Topic"
+        assert kwargs["metadata"]["learning_depth"] == "Deep Study"
+        assert kwargs["metadata"]["difficulty"] == "Intermediate"
+        assert "Focused review of agents" in kwargs["metadata"]["summary"]
+        assert mock_st.session_state["learn_progress_saved_signatures"] == ["AI Agents|Topic|Deep Study"]
+        mock_st.rerun.assert_called_once()
+
+    @patch("src.ui.learn_page.st")
+    def test_mark_as_studied_success_state_uses_updated_copy(self, mock_st):
+        from src.ui.learn_page import _display_progress_save_section
+
+        mock_st.session_state = {"learn_progress_saved_signatures": ["AI Agents|Topic|Deep Study"]}
+
+        _display_progress_save_section(
+            {"topic": "AI Agents"},
+            guide=None,
+            mode="Topic",
+            depth="Deep Study",
+            feedback_topic="AI Agents",
+        )
+
+        mock_st.success.assert_called_once_with("✅ Saved to Progress.")
+
+    @patch("src.ui.learn_page.st")
+    @patch("src.memory.memory_service.has_completed_learn_session", return_value=True)
+    def test_mark_as_studied_hides_button_after_persisted_duplicate(self, mock_has_completed, mock_st):
+        from src.ui.learn_page import _display_progress_save_section
+
+        mock_st.session_state = {}
+
+        _display_progress_save_section(
+            {"topic": "AI Agents"},
+            guide=None,
+            mode="Topic",
+            depth="Deep Study",
+            feedback_topic="AI Agents",
+        )
+
+        mock_has_completed.assert_called_once()
+        mock_st.success.assert_called_once_with("✅ Already marked as studied.")
+        mock_st.button.assert_not_called()
 
 
 class TestQuizUiCopy:
@@ -1687,6 +2009,7 @@ class TestDashboardStructure:
             source = f.read()
         assert "No saved learning memory yet." in source
         assert "No feedback captured yet." in source
+        assert "Save a Learn study session or quiz result" in source
 
     def test_dashboard_uses_shorter_snapshot_values(self):
         with open("src/ui/dashboard_page.py") as f:
@@ -1726,6 +2049,92 @@ class TestDashboardStructure:
             source = f.read()
         assert "deduplicated by source file in this view" in source
         assert "displayed after deduplication by source file" in source
+
+    def test_progress_page_copy_mentions_learn_and_quiz_persistence_paths(self):
+        with open("src/ui/progress_page.py") as f:
+            source = f.read()
+        assert "Progress is recorded when you explicitly save a Learn result as studied or save a completed Quiz result." in source
+        assert '"Completed Learn Sessions"' in source
+        assert '"Mark as Not Completed"' in source
+        assert '"Quiz Performance"' in source
+        assert "with st.container(border=True):" in source
+
+    def test_progress_page_uses_native_feedback_layout_helpers(self):
+        from src.ui.progress_page import _format_feedback_entry_display, _format_learning_event_display
+
+        feedback = _format_feedback_entry_display(
+            {
+                "context_type": "learn",
+                "topic": "AI Agents",
+                "rating": 4,
+                "comment": "",
+                "timestamp": "2026-05-13T09:00:00+00:00",
+                "metadata": {
+                    "learning_mode": "Learn Path",
+                    "difficulty": "Beginner",
+                    "context_title": "Foundations of LLM Application Development",
+                    "learning_depth": "Summary",
+                },
+            }
+        )
+        quiz_feedback = _format_feedback_entry_display(
+            {
+                "context_type": "quiz",
+                "topic": "AI Agents",
+                "rating": 3,
+                "comment": "Could be harder.",
+                "timestamp": "2026-05-13T09:00:00+00:00",
+                "metadata": {
+                    "difficulty": "Intermediate",
+                    "context_title": "AI Agents",
+                },
+            }
+        )
+        event = _format_learning_event_display(
+            {
+                "topic": "Advanced Agentic RAG",
+                "timestamp": "2026-05-13T09:00:00+00:00",
+                "score": 0.0,
+                "weak_areas": [],
+                "metadata": {
+                    "source": "learn_studied",
+                    "learning_mode": "Learn Path",
+                    "difficulty": "Advanced",
+                    "learning_depth": "Deep Study",
+                    "summary": "Reviewed orchestration and retrieval handoffs.",
+                },
+            }
+        )
+
+        assert feedback["rating_label"] == "⭐ Rating: 4/5"
+        assert feedback["context_title"] == "Learn Path · Beginner - Foundations of LLM Application Development (Summary)"
+        assert feedback["comment"] == "No comment provided."
+        assert quiz_feedback["context_title"] == "Quiz · AI Agents · Intermediate"
+        assert event["context_title"] == "Learn Path · Advanced - Advanced Agentic RAG (Deep Study)"
+        assert event["detail"] == "✅ Completed"
+        assert "Reviewed orchestration" in event["summary"]
+
+    def test_progress_page_feedback_cards_use_delete_button_without_dividers(self):
+        with open("src/ui/progress_page.py") as f:
+            source = f.read()
+        feedback_block = source[source.index('st.subheader("Recent Feedback")'):]
+        feedback_block = feedback_block[:feedback_block.index('if feedback_summary.get("total_count", 0) > 0:')]
+        assert '"🗑️ Delete"' in feedback_block
+        assert "st.divider()" not in feedback_block
+
+    def test_progress_page_humanizes_feedback_suggestion_labels(self):
+        from src.ui.progress_page import _humanize_feedback_suggestion
+
+        assert _humanize_feedback_suggestion("increase_difficulty") == "Increase difficulty"
+        assert _humanize_feedback_suggestion("simplify") == "Simplify explanations"
+        assert _humanize_feedback_suggestion(None) == "—"
+
+    def test_progress_page_no_longer_duplicates_learn_sessions_in_memory_profile(self):
+        with open("src/ui/progress_page.py") as f:
+            source = f.read()
+        assert '"Memory Profile"' not in source
+        assert '"Saved Learn Sessions"' not in source
+        assert '"Completed Learn Sessions"' in source
 
 
 class TestHelpAssistantUi:

@@ -1,6 +1,7 @@
 """Shared UI helpers and constants used across page modules."""
 
 import re
+from typing import Any
 
 import streamlit as st
 
@@ -251,14 +252,53 @@ def _display_memory_section(result: dict) -> None:
     info banner is shown *inside* the expander so the container is never
     visually empty.
     """
-    profile = result.get("memory_profile")
-    mem = format_memory_transparency(profile)
-
     _EMPTY_MEMORY_MSG = (
         "No learning memory available yet. "
-        "Complete quizzes and learning sessions "
+        "Save a Learn study session or quiz result "
         "to build personalized learning memory."
     )
+
+    def _humanize_feedback_signal(signal: str | None) -> str:
+        if signal == "increase_difficulty":
+            return "Increase difficulty"
+        if signal == "simplify":
+            return "Simplify explanations"
+        return ""
+
+    def _format_completed_session_label(event: dict[str, Any]) -> str:
+        metadata = event.get("metadata", {}) or {}
+        topic = event.get("topic", "Learn session")
+        depth = metadata.get("learning_depth")
+        return f"{topic} ({depth})" if depth else topic
+
+    def _load_live_memory_profile() -> dict | None:
+        live_profile: dict[str, Any] = {}
+        try:
+            from src.memory.memory_service import (
+                get_completed_learn_sessions,
+                get_user_profile_summary,
+            )
+
+            live_profile.update(get_user_profile_summary())
+            live_profile["completed_learn_sessions"] = get_completed_learn_sessions(limit=3)
+        except Exception:
+            pass
+
+        try:
+            from src.memory.feedback_service import get_feedback_summary
+
+            feedback_summary = get_feedback_summary()
+            live_profile["feedback_summary"] = feedback_summary
+            live_profile["feedback_suggestion"] = feedback_summary.get("suggestion")
+        except Exception:
+            pass
+
+        base_profile = dict(result.get("memory_profile") or {})
+        if not live_profile:
+            return base_profile or None
+        return {**base_profile, **live_profile}
+
+    mem = format_memory_transparency(_load_live_memory_profile())
 
     with st.expander("Memory Profile", expanded=False):
         if not mem["loaded"]:
@@ -266,18 +306,42 @@ def _display_memory_section(result: dict) -> None:
             return
 
         has_content = False
+        completed_sessions = mem.get("completed_learn_sessions", [])
+        if completed_sessions:
+            labels = [_format_completed_session_label(event) for event in completed_sessions[:3]]
+            st.markdown("**Completed Learn sessions:** " + ", ".join(labels))
+            has_content = True
+
+        feedback_count = mem.get("feedback_total_count", 0)
+        if feedback_count > 0:
+            feedback_parts = [str(feedback_count)]
+            average_rating = mem.get("feedback_average_rating")
+            if average_rating is not None:
+                feedback_parts.append(f"Average rating: {average_rating:.1f}/5")
+            signal = _humanize_feedback_signal(mem.get("feedback_suggestion"))
+            if signal:
+                feedback_parts.append(f"Current signal: {signal}")
+            st.markdown("**Feedback entries:** " + " · ".join(feedback_parts))
+            has_content = True
+
+        quiz_parts: list[str] = []
+        if mem.get("average_score") is not None:
+            quiz_parts.append(f"Average score: {mem['average_score']:.0f}%")
+        if mem.get("weak_areas"):
+            quiz_parts.append("Weak areas: " + ", ".join(mem["weak_areas"]))
+        if mem.get("suggested_focus"):
+            quiz_parts.append("Suggested focus: " + ", ".join(mem["suggested_focus"]))
+        if quiz_parts:
+            st.markdown("**Quiz performance:** " + " · ".join(quiz_parts))
+            has_content = True
+        elif completed_sessions or feedback_count > 0:
+            st.markdown("**Quiz performance:** No saved quiz performance yet")
+            has_content = True
+
         if mem.get("recent_topics"):
             st.markdown("**Recent topics:** " + ", ".join(mem["recent_topics"]))
             has_content = True
-        if mem.get("weak_areas"):
-            st.markdown("**Recurring weak areas:** " + ", ".join(mem["weak_areas"]))
-            has_content = True
-        if mem.get("average_score") is not None:
-            st.markdown(f"**Average score:** {mem['average_score']:.0f}%")
-            has_content = True
-        if mem.get("suggested_focus"):
-            st.markdown("**Suggested focus:** " + ", ".join(mem["suggested_focus"]))
-            has_content = True
+
         if mem.get("preferred_style"):
             st.markdown(f"**Preferred style:** {mem['preferred_style']}")
             has_content = True
@@ -455,16 +519,37 @@ def _display_feedback_widget(
     topic: str,
     *,
     expanded: bool = False,
+    metadata: dict[str, Any] | None = None,
+    result_signature: str | None = None,
 ) -> None:
     """Display a rating + comment feedback form for learn or quiz."""
     if not topic:
         return
 
-    key_prefix = f"fb_{context_type}"
-    saved_key = f"{key_prefix}_saved"
+    topic_key = re.sub(r"[^a-z0-9]+", "_", topic.lower()).strip("_") or "topic"
+    key_prefix = f"fb_{context_type}_{topic_key}"
+    signature_text = result_signature or topic
+    signature_key = re.sub(r"[^a-z0-9]+", "_", signature_text.lower()).strip("_") or "result"
+    status_key = f"{key_prefix}_{signature_key}_status"
+    status = st.session_state.get(status_key)
+    feedback_metadata = dict(metadata or {})
+    if result_signature:
+        feedback_metadata.setdefault("result_signature", result_signature)
 
-    if st.session_state.get(saved_key):
-        st.success("Feedback saved. Thank you!")
+    if status == "just_saved":
+        st.success("✅ Feedback saved. Thank you!")
+        st.session_state[status_key] = "submitted"
+        return
+
+    if status == "submitted":
+        st.success("✅ Feedback already submitted for this result.")
+        return
+
+    from src.memory.feedback_service import has_feedback_for_result
+
+    if has_feedback_for_result(context_type, topic, metadata=feedback_metadata):
+        st.session_state[status_key] = "submitted"
+        st.success("✅ Feedback already submitted for this result.")
         return
 
     with st.expander(f"Rate this {context_type} experience", expanded=expanded):
@@ -482,8 +567,10 @@ def _display_feedback_widget(
                 topic=topic,
                 rating=rating,
                 comment=comment,
+                metadata=feedback_metadata,
             )
-            st.session_state[saved_key] = True
+            st.session_state[status_key] = "just_saved"
+            st.rerun()
 
 
 def _result_has_cache_hit(result: dict | None) -> bool:

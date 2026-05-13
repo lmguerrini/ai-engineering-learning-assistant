@@ -216,7 +216,7 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
     if not memory_profile:
         return {
             "loaded": False,
-            "message": "No learning memory available yet. Complete quizzes and learning sessions to build personalized learning memory.",
+            "message": "No learning memory available yet. Save a Learn study session or quiz result to build personalized learning memory.",
         }
 
     result = {
@@ -226,7 +226,21 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
         "average_score": memory_profile.get("average_score"),
         "suggested_focus": memory_profile.get("suggested_focus_topics", []),
         "preferred_style": memory_profile.get("preferred_style"),
+        "completed_learn_sessions": memory_profile.get("completed_learn_sessions", []),
+        "feedback_summary": memory_profile.get("feedback_summary", {}) or {},
+        "feedback_average_rating": None,
+        "feedback_total_count": 0,
+        "feedback_suggestion": memory_profile.get("feedback_suggestion"),
     }
+
+    feedback_summary = result["feedback_summary"]
+    result["feedback_average_rating"] = feedback_summary.get("average_rating")
+    result["feedback_total_count"] = feedback_summary.get("total_count", 0) or 0
+    result["feedback_suggestion"] = (
+        feedback_summary.get("suggestion")
+        if "suggestion" in feedback_summary
+        else result["feedback_suggestion"]
+    )
 
     # If profile dict exists but contains no meaningful data, mark as not loaded
     has_data = (
@@ -235,6 +249,8 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
         or result["average_score"] is not None
         or bool(result["suggested_focus"])
         or bool(result["preferred_style"])
+        or bool(result["completed_learn_sessions"])
+        or result["feedback_total_count"] > 0
     )
     if not has_data:
         result["loaded"] = False
