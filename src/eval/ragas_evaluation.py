@@ -26,6 +26,30 @@ from loguru import logger
 
 LATEST_RESULTS_PATH = Path(__file__).resolve().parents[2] / "data" / "eval" / "results" / "latest_ragas_eval.json"
 
+MAX_EVAL_ANSWER_CHARS = 6000
+MAX_EVAL_CONTEXT_CHARS = 12000
+MIN_EVAL_ANSWER_CHARS = {
+    "learn_path": 3000,
+    "topic_mode": 3000,
+    "help_assistant": 400,
+}
+
+LEARN_PATH_EVAL_TOPIC_MAP = {
+    "beginner": (
+        "Foundations of LLM Application Development: LLM basics, prompt engineering, "
+        "development environment, API usage, and first working application"
+    ),
+    "intermediate": (
+        "Building Applications with LangChain, RAGs, and Streamlit: LangChain chains, "
+        "retrieval-augmented generation, function calling, tool integration, "
+        "Streamlit UI, and evaluation"
+    ),
+    "advanced": (
+        "AI Agents and Orchestration: LangGraph state management, agentic RAG, "
+        "long-term memory, human-in-the-loop, checkpointers, observability, "
+        "and production deployment"
+    ),
+}
 
 # ---------------------------------------------------------------------------
 # Eval case definition
@@ -106,49 +130,6 @@ DEFAULT_CASES: list[RAGAsEvalCase] = [
             "APIs and agent orchestration for multi-step tool use loops."
         ),
     ),
-    RAGAsEvalCase(
-        topic="LangGraph",
-        difficulty="",
-        surface="topic_mode",
-        label_suffix="Topic Mode",
-        user_input=(
-            "How does LangGraph manage shared state across nodes? Explain reducers, "
-            "state updates, and why explicit state helps multi-step workflows."
-        ),
-        reference=(
-            "LangGraph keeps workflow data in an explicit shared state object. Nodes "
-            "read from that state and return updates, while reducers merge values when "
-            "multiple branches write to the same field. Explicit state makes multi-step "
-            "workflows easier to inspect, debug, and resume."
-        ),
-    ),
-    RAGAsEvalCase(
-        topic="How does this app work?",
-        difficulty="",
-        surface="help_assistant",
-        label_suffix="App Workflow Context, Help Assistant",
-        user_input=(
-            "How does this app work?"
-        ),
-        reference=(
-            "The app has Learn, Quiz, Progress, Dashboard, and Help Assistant surfaces. "
-            "Learn generates grounded study guides and Learn Paths. Quiz generates and "
-            "evaluates RAG-grounded quizzes. Progress shows saved attempts and weak areas. "
-            "Dashboard exposes observability, KB health, runtime diagnostics, and evaluation readiness."
-        ),
-    ),
-    RAGAsEvalCase(
-        topic="Difference between RAG and Agentic RAG",
-        difficulty="",
-        surface="help_assistant",
-        label_suffix="Live official docs enrichment, Help Assistant",
-        user_input="Difference between RAG and Agentic RAG",
-        reference=(
-            "RAG retrieves relevant context and then generates an answer from that retrieved evidence. "
-            "Agentic RAG adds planning or tool-using agent behavior around retrieval, such as iterative "
-            "query reformulation, branching, validation, or multi-step tool use before answering."
-        ),
-    ),
 ]
 
 
@@ -170,6 +151,11 @@ class RAGAsCaseResult:
     answer_correctness: float | None = None
     num_contexts: int = 0
     answer_length: int = 0
+    contexts_count: int = 0
+    answer_length_original: int = 0
+    answer_length_evaluated: int = 0
+    was_truncated: bool = False
+    metric_errors: dict[str, str] = field(default_factory=dict)
     error: str | None = None
 
 
@@ -183,6 +169,8 @@ class RAGAsReport:
     avg_context_precision: float | None = None
     avg_context_recall: float | None = None
     avg_answer_correctness: float | None = None
+    category_averages: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    global_averages: dict[str, float | None] = field(default_factory=dict)
     timestamp: str = ""
     model: str = ""
     case_count: int = 0
@@ -258,9 +246,12 @@ def _generate_learn_content(case: RAGAsEvalCase) -> dict[str, Any]:
         "advanced": DifficultyLevel.ADVANCED,
     }
     difficulty = difficulty_map.get(case.difficulty, DifficultyLevel.INTERMEDIATE)
+    workflow_topic = case.topic
+    if case.surface == "learn_path":
+        workflow_topic = LEARN_PATH_EVAL_TOPIC_MAP.get(case.difficulty, case.topic)
 
     state = run_learn_workflow(
-        topic=case.topic,
+        topic=workflow_topic,
         difficulty=difficulty,
         style=ResponseStyle.DETAILED,
         force_regenerate=True,
@@ -291,6 +282,9 @@ def _generate_learn_content(case: RAGAsEvalCase) -> dict[str, Any]:
         "contexts": contexts,
         "sources_count": len(docs),
         "error": None,
+        "trace": state.get("trace", []),
+        "generation_failed": bool(state.get("generation_failed")),
+        "workflow_topic": workflow_topic,
     }
 
 
@@ -325,6 +319,8 @@ def _generate_help_assistant_content(case: RAGAsEvalCase) -> dict[str, Any]:
         "contexts": contexts,
         "sources_count": len(source_rows) if source_rows else 1,
         "error": None,
+        "trace": result.get("trace", []),
+        "generation_failed": False,
     }
 
 
@@ -355,10 +351,17 @@ async def _evaluate_single_case(
         surface=case.surface,
         num_contexts=len(content["contexts"]),
         answer_length=len(content["answer"]),
+        contexts_count=len(content["contexts"]),
+        answer_length_original=len(content["answer"]),
     )
 
     if content.get("error"):
         result.error = content["error"]
+        return result
+
+    validation_error = _validate_generated_eval_content(case, content)
+    if validation_error:
+        result.error = validation_error
         return result
 
     if not content["answer"] or not content["contexts"]:
@@ -366,38 +369,41 @@ async def _evaluate_single_case(
         return result
 
     user_input = case.user_input
-    response = content["answer"]
-    contexts = content["contexts"]
+    response = str(content["answer"])
+    contexts = [str(ctx) for ctx in content["contexts"]]
     reference = case.reference
-
-    # Truncate very long responses to avoid max_tokens failures during
-    # Faithfulness statement extraction and AnswerCorrectness comparison.
-    # Study guides are 14-23k chars; Faithfulness works at 2000 chars,
-    # AnswerCorrectness (TP/FP/FN classification) needs shorter input.
-    faith_response = response[:1500] if len(response) > 1500 else response
-    correctness_response = response[:1200] if len(response) > 1200 else response
+    eval_answer = response[:MAX_EVAL_ANSWER_CHARS]
+    eval_contexts, context_chars_evaluated = _truncate_eval_contexts(
+        contexts,
+        max_total_chars=MAX_EVAL_CONTEXT_CHARS,
+    )
+    content["eval_answer"] = eval_answer
+    content["eval_contexts"] = eval_contexts
+    result.answer_length_evaluated = len(eval_answer)
+    result.was_truncated = (
+        len(eval_answer) < len(response)
+        or context_chars_evaluated < sum(len(ctx) for ctx in contexts)
+    )
 
     # Map metric class name → (field_name, kwargs)
-    # Faithfulness and AnswerCorrectness use truncated response to avoid
-    # structured-output failures with very long answers (14-23k chars)
     metric_kwargs_map = {
         "Faithfulness": ("faithfulness", {
-            "user_input": user_input, "response": faith_response,
-            "retrieved_contexts": contexts,
+            "user_input": user_input, "response": eval_answer,
+            "retrieved_contexts": eval_contexts,
         }),
         "AnswerRelevancy": ("answer_relevancy", {
-            "user_input": user_input, "response": response,
+            "user_input": user_input, "response": eval_answer,
         }),
         "ContextPrecision": ("context_precision", {
             "user_input": user_input, "reference": reference,
-            "retrieved_contexts": contexts,
+            "retrieved_contexts": eval_contexts,
         }),
         "ContextRecall": ("context_recall", {
-            "user_input": user_input, "retrieved_contexts": contexts,
+            "user_input": user_input, "retrieved_contexts": eval_contexts,
             "reference": reference,
         }),
         "AnswerCorrectness": ("answer_correctness", {
-            "user_input": user_input, "response": correctness_response,
+            "user_input": user_input, "response": eval_answer,
             "reference": reference,
         }),
     }
@@ -418,6 +424,7 @@ async def _evaluate_single_case(
             setattr(result, field_name, round(float(metric_result.value), 4))
         except Exception as e:
             logger.warning("Metric {} failed for '{}': {}", metric_name, case.topic, e)
+            result.metric_errors[field_name] = _format_metric_error_reason(e)
 
     return result
 
@@ -433,6 +440,103 @@ def _compute_averages(results: list[RAGAsCaseResult]) -> dict[str, float | None]
         values = [getattr(r, name) for r in results if getattr(r, name) is not None]
         averages[f"avg_{name}"] = round(sum(values) / len(values), 4) if values else None
     return averages
+
+
+def _truncate_eval_contexts(
+    contexts: list[str],
+    *,
+    max_total_chars: int,
+) -> tuple[list[str], int]:
+    """Truncate retrieved contexts to a total character budget for judge safety."""
+    remaining = max_total_chars
+    truncated: list[str] = []
+    total = 0
+    for context in contexts:
+        if remaining <= 0:
+            break
+        chunk = context[:remaining]
+        if not chunk.strip():
+            continue
+        truncated.append(chunk)
+        consumed = len(chunk)
+        total += consumed
+        remaining -= consumed
+    return truncated, total
+
+
+def _is_app_workflow_context_case(case: RAGAsEvalCase) -> bool:
+    """Return whether the case is expected to use internal app-workflow context."""
+    if case.surface != "help_assistant":
+        return False
+    haystack = " ".join(
+        part for part in (case.topic, case.user_input, case.label_suffix) if part
+    ).lower()
+    return "app workflow context" in haystack or "how does this app work" in haystack
+
+
+def _looks_like_fallback_or_error_content(answer: str, trace: list[str]) -> bool:
+    """Detect short fallback/error-like content that should not be benchmarked."""
+    answer_lower = answer.lower()
+    fallback_markers = (
+        "could not be fully generated",
+        "please try again",
+        "using fallback",
+        "no api key",
+    )
+    if any(marker in answer_lower for marker in fallback_markers):
+        return True
+    trace_text = " ".join(str(step).lower() for step in trace)
+    return any(marker in trace_text for marker in fallback_markers)
+
+
+def _validate_generated_eval_content(
+    case: RAGAsEvalCase,
+    content: dict[str, Any],
+) -> str | None:
+    """Return a generation-validation error, or None when content is safe to judge."""
+    answer = str(content.get("answer", "")).strip()
+    contexts = [str(ctx).strip() for ctx in content.get("contexts", []) if str(ctx).strip()]
+    trace = list(content.get("trace", []))
+
+    if content.get("generation_failed"):
+        return "Generated content invalid: workflow marked generation_failed."
+    if not answer:
+        return "Generated content invalid: empty answer."
+    if _looks_like_fallback_or_error_content(answer, trace):
+        return "Generated content invalid: fallback/error-like output detected."
+
+    min_answer_chars = MIN_EVAL_ANSWER_CHARS.get(case.surface, MIN_EVAL_ANSWER_CHARS["topic_mode"])
+    if len(answer) < min_answer_chars:
+        return (
+            f"Generated content invalid: answer too short for {case.surface} "
+            f"({len(answer)} chars, min {min_answer_chars})."
+        )
+
+    if not contexts and not _is_app_workflow_context_case(case):
+        return "Generated content invalid: no evaluation contexts were produced."
+
+    return None
+
+
+def _format_metric_error_reason(exc: Exception) -> str:
+    """Convert a judge exception into a short reviewer-facing reason."""
+    message = str(exc).strip() or exc.__class__.__name__
+    lower = message.lower()
+    if "max_tokens" in lower or "max tokens" in lower or "length limit" in lower:
+        return "judge failed: max tokens limit"
+    if "incomplete" in lower and "output" in lower:
+        return "judge failed: incomplete output"
+    if "llm" in lower or "openai" in lower or "judge" in lower:
+        return "judge failed: llm error"
+    return f"judge failed: {message}"
+
+
+def _compute_category_averages(results: list[RAGAsCaseResult]) -> dict[str, dict[str, float | None]]:
+    """Compute averages grouped by evaluation surface/category."""
+    grouped: dict[str, list[RAGAsCaseResult]] = {}
+    for result in results:
+        grouped.setdefault(result.surface, []).append(result)
+    return {surface: _compute_averages(surface_results) for surface, surface_results in grouped.items()}
 
 
 def _get_configured_case_map(
@@ -564,14 +668,17 @@ def run_ragas_evaluation(
         loop.close()
 
     # Step 3: Compute averages
-    averages = _compute_averages(results)
+    category_averages = _compute_category_averages(results)
+    overall_averages = _compute_averages(results)
 
     report = RAGAsReport(
         results=results,
         timestamp=datetime.now(timezone.utc).isoformat(),
         model=model,
         case_count=len(cases),
-        **averages,
+        category_averages=category_averages,
+        global_averages=overall_averages,
+        **overall_averages,
     )
 
     # Persist to cache
@@ -617,11 +724,26 @@ def format_ragas_report(
         elif result.error:
             lines.append(f"  ERROR: {result.error}")
         else:
-            lines.append(f"  Contexts: {result.num_contexts}  |  Answer length: {result.answer_length} chars")
-            lines.append(f"  Faithfulness:       {_fmt(result.faithfulness)}")
-            lines.append(f"  Answer Relevancy:   {_fmt(result.answer_relevancy)}")
-            lines.append(f"  Context Precision:  {_fmt(result.context_precision)}")
-            lines.append(f"  Context Recall:     {_fmt(result.context_recall)}")
+            truncation_note = "  |  Truncated for judge safety" if result.was_truncated else ""
+            lines.append(
+                f"  Contexts: {result.contexts_count or result.num_contexts}  |  "
+                f"Answer length: {result.answer_length_original or result.answer_length} chars"
+                f"{truncation_note}"
+            )
+            if result.answer_length_evaluated:
+                lines.append(f"  Evaluated answer length: {result.answer_length_evaluated} chars")
+            for metric_label, field_name, value in [
+                ("Faithfulness", "faithfulness", result.faithfulness),
+                ("Answer Relevancy", "answer_relevancy", result.answer_relevancy),
+                ("Context Precision", "context_precision", result.context_precision),
+                ("Context Recall", "context_recall", result.context_recall),
+                ("Answer Correctness", "answer_correctness", result.answer_correctness),
+            ]:
+                metric_line = f"  {metric_label + ':':<20} {_fmt(value)}"
+                metric_error = result.metric_errors.get(field_name)
+                if value is None and metric_error:
+                    metric_line += f" — {metric_error}"
+                lines.append(metric_line)
         lines.append("")
 
     if configured:
@@ -634,30 +756,71 @@ def format_ragas_report(
         for result in report.results:
             _append_case_block(result.topic, result.difficulty, result)
 
-    lines.append("--- Averages ---")
+    lines.append("--- Learn Path Averages ---")
     lines.append(f"  Faithfulness:       {_fmt(report.avg_faithfulness)}")
     lines.append(f"  Answer Relevancy:   {_fmt(report.avg_answer_relevancy)}")
     lines.append(f"  Context Precision:  {_fmt(report.avg_context_precision)}")
     lines.append(f"  Context Recall:     {_fmt(report.avg_context_recall)}")
     lines.append("")
 
-    # Quality assessment (primary metrics only)
+    lines.append("--- Category Averages ---")
+    for surface in ("learn_path", "topic_mode", "help_assistant"):
+        averages = report.category_averages.get(surface)
+        if not averages:
+            continue
+        lines.append(f"  {SURFACE_LABELS.get(surface, surface)}:")
+        lines.append(f"    Faithfulness:       {_fmt(averages.get('avg_faithfulness'))}")
+        lines.append(f"    Answer Relevancy:   {_fmt(averages.get('avg_answer_relevancy'))}")
+        lines.append(f"    Context Precision:  {_fmt(averages.get('avg_context_precision'))}")
+        lines.append(f"    Context Recall:     {_fmt(averages.get('avg_context_recall'))}")
+    if report.global_averages:
+        lines.append("  Overall Evaluated Score:")
+        lines.append(f"    Faithfulness:       {_fmt(report.global_averages.get('avg_faithfulness'))}")
+        lines.append(f"    Answer Relevancy:   {_fmt(report.global_averages.get('avg_answer_relevancy'))}")
+        lines.append(f"    Context Precision:  {_fmt(report.global_averages.get('avg_context_precision'))}")
+        lines.append(f"    Context Recall:     {_fmt(report.global_averages.get('avg_context_recall'))}")
+    lines.append("")
+
+    # Quality assessment (primary metrics only, current Learn Path benchmark scope)
     lines.append("--- Quality Assessment (Primary Metrics) ---")
-    passing = True
+    benchmark_passing = True
+    available_primary = 0
+    missing_primary: list[str] = []
     for name, val in [
         ("Faithfulness", report.avg_faithfulness),
         ("Answer Relevancy", report.avg_answer_relevancy),
         ("Context Precision", report.avg_context_precision),
         ("Context Recall", report.avg_context_recall),
     ]:
+        if val is not None:
+            available_primary += 1
+        else:
+            missing_primary.append(name)
         if val is not None and val < 0.6:
             lines.append(f"  ⚠ {name} below threshold (0.6): {val:.4f}")
-            passing = False
+            benchmark_passing = False
 
-    if passing:
-        lines.append("  ✅ All primary metrics above threshold — Learn quality is acceptable.")
+    generation_failures = [result for result in report.results if result.error]
+
+    if available_primary == 0:
+        lines.append("  ⚠ Benchmark incomplete — all primary metrics are unavailable due to judge or generation failures.")
+    elif benchmark_passing:
+        if missing_primary or generation_failures:
+            lines.append(
+                "  ⚠ Benchmark partially complete — available primary metrics passed, "
+                "but some cases or judge metrics were unavailable."
+            )
+        else:
+            lines.append("  ✅ All available primary Learn Path metrics above threshold — benchmark passed.")
     else:
-        lines.append("  ❌ Some primary metrics below threshold — review recommended.")
+        lines.append("  ❌ Primary Learn Path metrics below threshold — review recommended.")
+
+    if missing_primary:
+        lines.append(f"  Judge-limited metrics: {', '.join(missing_primary)}.")
+    if generation_failures:
+        lines.append(
+            f"  Case generation failures: {len(generation_failures)} case(s) produced invalid or short output and were not scored."
+        )
 
     lines.append("")
     return "\n".join(lines)
