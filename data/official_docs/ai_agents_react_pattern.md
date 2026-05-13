@@ -1,7 +1,7 @@
 # AI Agents & ReAct Pattern
 
 - **Official source**: https://python.langchain.com/docs/concepts/agents/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `langchain>=0.2`, `langgraph>=0.2`
 

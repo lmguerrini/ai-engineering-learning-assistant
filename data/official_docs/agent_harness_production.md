@@ -1,7 +1,7 @@
 # Agent Harness & Production Deployment
 
 - **Official source**: https://langchain-ai.github.io/langgraph/concepts/deployment/, https://python.langchain.com/docs/concepts/architecture/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`, `langchain>=0.2`
 

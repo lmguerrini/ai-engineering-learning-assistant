@@ -1,7 +1,7 @@
 # RAGAs Evaluation
 
 - **Official source**: https://docs.ragas.io/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `ragas>=0.1`
 

@@ -1,7 +1,7 @@
 # Tool Calling & Function Calling
 
 - **Official source**: https://platform.openai.com/docs/guides/function-calling, https://python.langchain.com/docs/concepts/tool_calling/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `openai>=1.0`, `langchain-core>=0.2`
 

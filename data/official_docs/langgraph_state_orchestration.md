@@ -1,7 +1,7 @@
 # LangGraph State & Orchestration
 
 - **Official source**: https://langchain-ai.github.io/langgraph/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `langgraph>=0.2`
 

@@ -1,7 +1,7 @@
 # Pydantic Validation & Settings
 
 - **Official source**: https://docs.pydantic.dev/
-- **Last refreshed**: 2026-05-12
+- **Last refreshed**: 2026-05-13
 - **source_type**: official_docs
 - **Versions**: `pydantic>=2.0`, `pydantic-settings>=2.0`
 
