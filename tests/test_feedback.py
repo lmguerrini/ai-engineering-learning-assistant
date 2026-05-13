@@ -6,8 +6,10 @@ import pytest
 
 from src.memory.feedback_service import (
     _derive_suggestion,
+    delete_feedback,
     get_feedback_summary,
     get_recent_feedback,
+    has_feedback_for_result,
     save_feedback,
 )
 
@@ -52,6 +54,64 @@ class TestSaveRetrieve:
         assert len(recent) == 2
 
     def test_empty_db(self, fb_db: Path):
+        assert get_recent_feedback(db_path=fb_db) == []
+
+    def test_has_feedback_for_result_matches_result_signature(self, fb_db: Path):
+        save_feedback(
+            "learn",
+            "AI Agents",
+            4,
+            metadata={
+                "learning_mode": "Topic",
+                "learning_depth": "Deep Study",
+                "context_title": "AI Agents",
+                "result_signature": "Topic | AI Agents | Deep Study",
+            },
+            db_path=fb_db,
+        )
+
+        assert has_feedback_for_result(
+            "learn",
+            "AI Agents",
+            metadata={"result_signature": "Topic | AI Agents | Deep Study"},
+            db_path=fb_db,
+        ) is True
+        assert has_feedback_for_result(
+            "learn",
+            "AI Agents",
+            metadata={"result_signature": "Topic | AI Agents | Summary"},
+            db_path=fb_db,
+        ) is False
+
+    def test_has_feedback_for_result_falls_back_to_metadata_fields(self, fb_db: Path):
+        save_feedback(
+            "learn",
+            "Foundations of LLM Application Development",
+            5,
+            metadata={
+                "learning_mode": "Learn Path",
+                "learning_depth": "Summary",
+                "difficulty": "Beginner",
+                "context_title": "Foundations of LLM Application Development",
+            },
+            db_path=fb_db,
+        )
+
+        assert has_feedback_for_result(
+            "learn",
+            "Foundations of LLM Application Development",
+            metadata={
+                "learning_mode": "Learn Path",
+                "learning_depth": "Summary",
+                "difficulty": "Beginner",
+                "context_title": "Foundations of LLM Application Development",
+            },
+            db_path=fb_db,
+        ) is True
+
+    def test_delete_feedback_removes_row(self, fb_db: Path):
+        row_id = save_feedback("learn", "AI Agents", 4, "Helpful", db_path=fb_db)
+        assert delete_feedback(row_id, db_path=fb_db) is True
         assert get_recent_feedback(db_path=fb_db) == []
 
 

@@ -104,6 +104,52 @@ def get_recent_feedback(
         conn.close()
 
 
+def has_feedback_for_result(
+    context_type: str,
+    topic: str,
+    *,
+    metadata: dict[str, Any] | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    """Return whether matching feedback already exists for one logical result."""
+    expected = metadata or {}
+    expected_signature = expected.get("result_signature")
+
+    conn = _get_conn(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT metadata FROM feedback WHERE context_type = ? AND topic = ?",
+            (context_type, topic),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    for row in rows:
+        stored = json.loads(row["metadata"])
+        if expected_signature and stored.get("result_signature") == expected_signature:
+            return True
+        comparable = {
+            key: value
+            for key, value in expected.items()
+            if key in {"learning_mode", "learning_depth", "difficulty", "context_title"}
+            and value not in (None, "")
+        }
+        if comparable and all(stored.get(key) == value for key, value in comparable.items()):
+            return True
+    return False
+
+
+def delete_feedback(feedback_id: int, db_path: Path | None = None) -> bool:
+    """Delete one persisted feedback entry by id."""
+    conn = _get_conn(db_path)
+    try:
+        cursor = conn.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def get_feedback_summary(db_path: Path | None = None) -> dict[str, Any]:
     """Build a simple deterministic feedback summary.
 

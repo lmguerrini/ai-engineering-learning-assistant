@@ -8,8 +8,14 @@ import pytest
 
 from src.memory.db import get_connection
 from src.memory.memory_service import (
+    LEARN_STUDIED_SOURCE,
+    delete_learning_event,
+    get_completed_learn_sessions,
     get_recent_topics,
+    get_quiz_performance_events,
+    get_user_profile_summary,
     get_weak_areas_summary,
+    has_completed_learn_session,
     save_learning_event,
 )
 
@@ -145,6 +151,161 @@ class TestGetWeakAreasSummary:
 
     def test_empty_db(self, tmp_db: Path) -> None:
         assert get_weak_areas_summary(db_path=tmp_db) == {}
+
+    def test_learn_studied_events_do_not_affect_weak_area_summary(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="AI Agents",
+            score=80.0,
+            weak_areas=["planning"],
+            metadata={"source": "quiz_evaluation"},
+            db_path=tmp_db,
+        )
+        save_learning_event(
+            topic="LangGraph",
+            score=0.0,
+            weak_areas=["placeholder-area"],
+            metadata={"source": "learn_studied"},
+            db_path=tmp_db,
+        )
+
+        summary = get_weak_areas_summary(db_path=tmp_db)
+        assert summary == {"planning": 1}
+
+
+class TestStudyProgressEvents:
+    def test_learn_studied_events_show_in_recent_topics_but_not_average_score(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="AI Agents",
+            score=82.0,
+            weak_areas=["tool use"],
+            metadata={"source": "quiz_evaluation"},
+            db_path=tmp_db,
+        )
+        save_learning_event(
+            topic="Advanced Agentic RAG",
+            score=0.0,
+            metadata={
+                "source": "learn_studied",
+                "learning_mode": "Learn Path",
+                "learning_depth": "Deep Study",
+                "summary": "Reviewed retrieval and orchestration tradeoffs.",
+            },
+            db_path=tmp_db,
+        )
+
+        recent = get_recent_topics(limit=2, db_path=tmp_db)
+        profile = get_user_profile_summary(db_path=tmp_db)
+
+        assert recent[0]["topic"] == "Advanced Agentic RAG"
+        assert recent[0]["metadata"]["source"] == "learn_studied"
+        assert profile["recent_topics"][0] == "Advanced Agentic RAG"
+        assert profile["average_score"] == 82.0
+        assert "Advanced Agentic RAG" not in profile["suggested_focus_topics"]
+
+    def test_get_completed_learn_sessions_filters_only_studied_events(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="Foundations of LLM Application Development",
+            score=0.0,
+            metadata={
+                "source": "learn_studied",
+                "learning_mode": "Learn Path",
+                "learning_depth": "Summary",
+                "difficulty": "Beginner",
+            },
+            db_path=tmp_db,
+        )
+        save_learning_event(
+            topic="AI Agents",
+            score=78.0,
+            metadata={"source": "quiz_evaluation"},
+            db_path=tmp_db,
+        )
+
+        completed = get_completed_learn_sessions(db_path=tmp_db)
+        assert len(completed) == 1
+        assert completed[0]["topic"] == "Foundations of LLM Application Development"
+
+    def test_get_quiz_performance_events_filters_out_studied_events(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="Foundations of LLM Application Development",
+            score=0.0,
+            metadata={"source": "learn_studied"},
+            db_path=tmp_db,
+        )
+        save_learning_event(
+            topic="AI Agents",
+            score=78.0,
+            metadata={"source": "quiz_evaluation", "difficulty": "Intermediate"},
+            db_path=tmp_db,
+        )
+
+        quizzes = get_quiz_performance_events(db_path=tmp_db)
+        assert len(quizzes) == 1
+        assert quizzes[0]["topic"] == "AI Agents"
+
+    def test_has_completed_learn_session_detects_duplicate(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="AI Agents and Orchestration",
+            score=0.0,
+            metadata={
+                "source": "learn_studied",
+                "learning_mode": "Learn Path",
+                "learning_depth": "Deep Study",
+                "difficulty": "Advanced",
+            },
+            db_path=tmp_db,
+        )
+
+        assert has_completed_learn_session(
+            "AI Agents and Orchestration",
+            learning_mode="Learn Path",
+            learning_depth="Deep Study",
+            difficulty="Advanced",
+            db_path=tmp_db,
+        ) is True
+        assert has_completed_learn_session(
+            "AI Agents and Orchestration",
+            learning_mode="Learn Path",
+            learning_depth="Summary",
+            difficulty="Advanced",
+            db_path=tmp_db,
+        ) is False
+
+    def test_delete_learning_event_removes_learn_studied_row(self, tmp_db: Path) -> None:
+        event_id = save_learning_event(
+            topic="Foundations of LLM Application Development",
+            score=0.0,
+            metadata={"source": LEARN_STUDIED_SOURCE},
+            db_path=tmp_db,
+        )
+
+        deleted = delete_learning_event(
+            event_id,
+            source=LEARN_STUDIED_SOURCE,
+            db_path=tmp_db,
+        )
+
+        assert deleted is True
+        assert get_completed_learn_sessions(db_path=tmp_db) == []
+
+    def test_delete_learning_event_does_not_remove_quiz_rows_when_source_guarded(self, tmp_db: Path) -> None:
+        event_id = save_learning_event(
+            topic="AI Agents",
+            score=78.0,
+            metadata={"source": "quiz_evaluation", "difficulty": "Intermediate"},
+            db_path=tmp_db,
+        )
+
+        deleted = delete_learning_event(
+            event_id,
+            source=LEARN_STUDIED_SOURCE,
+            db_path=tmp_db,
+        )
+
+        assert deleted is False
+        quizzes = get_quiz_performance_events(db_path=tmp_db)
+        assert len(quizzes) == 1
+        assert quizzes[0]["id"] == event_id
 
 
 # ---------------------------------------------------------------------------
