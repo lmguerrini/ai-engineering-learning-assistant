@@ -184,6 +184,47 @@ class TestPromptStyleDifferentiation:
         assert p_summary != p_deep
         assert len(p_deep) > len(p_summary) + 100
 
+    def test_topic_deep_study_prompt_forbids_placeholder_code(self):
+        from src.graphs.learn_prompts import _build_deep_study_topic_markdown_prompt
+
+        state = {
+            "topic": "AI Agents",
+            "difficulty": DifficultyLevel.INTERMEDIATE,
+            "style": ResponseStyle.DETAILED,
+            "retrieved_docs": [],
+            "memory_profile": {},
+        }
+        prompt = _build_deep_study_topic_markdown_prompt(state)
+        assert "CODE BLOCK QUALITY RULES" in prompt
+        assert "comment-only code blocks" in prompt
+        assert "placeholder-only implementations" in prompt
+        assert "'# Logic to ...'" in prompt
+        assert "'# Placeholder ...'" in prompt
+        assert "'... additional logic ...'" in prompt
+        assert "explain the concept outside the code block" in prompt
+
+    def test_learn_path_deep_study_prompt_forbids_placeholder_code(self):
+        from src.graphs.learn_prompts import _build_deep_study_markdown_prompt
+
+        state = {
+            "topic": (
+                "Foundations of AI Engineering: LLM basics, prompt engineering, "
+                "development environment, and API usage"
+            ),
+            "difficulty": DifficultyLevel.INTERMEDIATE,
+            "style": ResponseStyle.DETAILED,
+            "retrieved_docs": [],
+            "memory_profile": {},
+        }
+        prompt = _build_deep_study_markdown_prompt(state)
+        assert "CODE BLOCK QUALITY RULES" in prompt
+        assert "comment-only code blocks" in prompt
+        assert "placeholder-only implementations" in prompt
+        assert "'# Logic to ...'" in prompt
+        assert "'# Placeholder ...'" in prompt
+        assert "'... additional logic ...'" in prompt
+        assert "short runnable examples or compact realistic snippets" in prompt
+
 
 class TestSnippetSanitization:
     """Source snippets should strip headings, single-letter artifacts, whitespace."""

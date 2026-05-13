@@ -7,6 +7,15 @@ from src.kb.loader import Document
 from src.schemas import DifficultyLevel, ResponseStyle
 from src.ui.shared import _LEARN_PATH_STABLE_TOPICS
 
+_DEEP_STUDY_CODE_RULES = (
+    "CODE BLOCK QUALITY RULES:\n"
+    "- Code blocks must contain real, concise, meaningful, implementation-oriented examples.\n"
+    "- Prefer short runnable examples or compact realistic snippets over long pseudo-implementations.\n"
+    "- Do NOT produce comment-only code blocks, placeholder-only implementations, or fake scaffolding.\n"
+    "- Do NOT write placeholder comments such as '# Logic to ...', '# Placeholder ...', or '... additional logic ...'.\n"
+    "- If a concrete example would require too much invented code, explain the concept outside the code block instead of fabricating code.\n"
+)
+
 
 def _build_sources_text(docs: list[Document]) -> str:
     """Render retrieved docs into a prompt-ready source block."""
@@ -317,8 +326,8 @@ def _build_deep_study_markdown_prompt(state: LearningState) -> str:
         f"```python blocks; cover configuration, parameters, integration points, "
         f"and environment setup. Show how pieces connect in a real codebase.\n"
         f"  4. **Practical Examples** — at least TWO realistic code examples: "
-        f"one basic usage, one advanced/production scenario. Include line-by-line "
-        f"commentary explaining key decisions.\n"
+        f"one basic usage, one advanced/production scenario. Keep examples short, "
+        f"realistic, and implementation-oriented.\n"
         f"  5. **Common Mistakes & Anti-Patterns** — concrete pitfalls with "
         f"root-cause explanations and corrective patterns. Include before/after "
         f"code pairs that contain ACTUAL runnable function/class structures, not "
@@ -338,6 +347,7 @@ def _build_deep_study_markdown_prompt(state: LearningState) -> str:
         f"'# Set up a schedule for regular evaluations' or '# Complex chain with "
         f"multiple responsibilities'. If the idea is conceptual, express it as "
         f"prose or bullet text OUTSIDE a code block instead.\n"
+        f"{_DEEP_STUDY_CODE_RULES}"
         f"- Before/after code pairs must show real function/class bodies with logic, "
         f"not comment-only placeholders.\n"
         f"- Use ## for each major topic heading, ### for sub-sections within.\n"
@@ -417,8 +427,8 @@ def _build_deep_study_topic_markdown_prompt(state: LearningState) -> str:
         f"```python blocks; cover configuration, parameters, integration points, "
         f"and environment setup. Show how pieces connect in a real codebase.\n"
         f"5. **Practical Examples** — at least two realistic, runnable code examples "
-        f"with line-by-line commentary. One should demonstrate basic usage, the "
-        f"other an advanced or production scenario.\n"
+        f"with concise explanation outside the block when needed. One should "
+        f"demonstrate basic usage, the other an advanced or production scenario.\n"
         f"6. **Production Considerations** — scaling, performance tuning, error "
         f"handling, monitoring, observability hooks, and deployment patterns.\n"
         f"7. **Common Mistakes & Anti-Patterns** — concrete pitfalls with root-cause "
@@ -443,6 +453,7 @@ def _build_deep_study_topic_markdown_prompt(state: LearningState) -> str:
         f"- All code examples must contain actual function/class/logic structure — "
         f"never use comment-only placeholders. Even illustrative code must be "
         f"semi-runnable with meaningful structure.\n"
+        f"{_DEEP_STUDY_CODE_RULES}"
         f"- Do NOT merge sections or skip any.\n"
         f"- Do NOT include a 'Topics' list — this is a single-topic deep study.\n"
         f"- Do NOT pad with filler — every sentence must add information.\n"
