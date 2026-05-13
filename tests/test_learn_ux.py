@@ -225,6 +225,66 @@ class TestPromptStyleDifferentiation:
         assert "'... additional logic ...'" in prompt
         assert "short runnable examples or compact realistic snippets" in prompt
 
+    def test_learn_path_deep_study_prompt_requires_senior_engineering_depth(self):
+        from src.graphs.learn_prompts import _build_deep_study_markdown_prompt
+
+        state = {
+            "topic": (
+                "AI Agents and Orchestration: LangGraph state management, agentic RAG, "
+                "long-term memory, human-in-the-loop, checkpointers, observability, "
+                "and production deployment"
+            ),
+            "difficulty": DifficultyLevel.ADVANCED,
+            "style": ResponseStyle.DETAILED,
+            "retrieved_docs": [],
+            "memory_profile": {},
+        }
+        prompt = _build_deep_study_markdown_prompt(state)
+        assert "SENIOR ENGINEERING DEPTH RULES" in prompt
+        assert "senior AI engineering mentor" in prompt
+        assert "engineering tradeoffs" in prompt
+        assert "production failure modes" in prompt
+        assert "scaling bottlenecks" in prompt
+        assert "latency/token tradeoffs" in prompt
+        assert "retrieval precision/recall" in prompt
+        assert "vector DB fragmentation" in prompt
+        assert "hallucination containment" in prompt
+        assert "async orchestration" in prompt
+        assert "concurrency" in prompt
+        assert "streaming orchestration" in prompt
+        assert "retry/backoff strategies" in prompt
+        assert "MCP/tool safety" in prompt
+        assert "eval methodology" in prompt
+
+    def test_progressive_learn_path_deep_study_prompt_requires_senior_engineering_depth(self):
+        from src.graphs.learn_prompts import _build_progressive_learn_path_section_prompt
+
+        state = {
+            "topic": (
+                "AI Agents and Orchestration: LangGraph state management, agentic RAG, "
+                "long-term memory, human-in-the-loop, checkpointers, observability, "
+                "and production deployment"
+            ),
+            "difficulty": DifficultyLevel.ADVANCED,
+            "style": ResponseStyle.DETAILED,
+            "retrieved_docs": [],
+            "memory_profile": {},
+        }
+        prompt = _build_progressive_learn_path_section_prompt(
+            state,
+            summary="Advanced agent orchestration curriculum.",
+            topic_name="LangGraph State Management",
+            section_number=1,
+        )
+        assert "senior AI engineering mentor" in prompt
+        assert "SENIOR ENGINEERING DEPTH RULES" in prompt
+        assert "engineering tradeoffs" in prompt
+        assert "production failure modes" in prompt
+        assert "latency/token tradeoffs" in prompt
+        assert "eval methodology" in prompt
+        assert "hallucination containment" in prompt
+        assert "Make the section dense, practical, and production-aware" in prompt
+
 
 class TestSnippetSanitization:
     """Source snippets should strip headings, single-letter artifacts, whitespace."""
