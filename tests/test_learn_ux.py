@@ -112,7 +112,7 @@ class TestHomePagePolish:
 
         assert 'def _set_active_section(section: str)' in source
         assert 'def _render_home_feature_card(title: str, body: str)' in source
-        assert "AI Engineering Learning App" in source
+        assert "AI Engineering Learning Assistant" in source
         assert "Study AI engineering with grounded lessons, quizzes, progress tracking, and scoped help." in source
         assert 'st.button("Start Learning"' in source
         assert 'st.button("Take a Quiz"' in source

@@ -103,7 +103,7 @@ def render_intro() -> None:
     st.markdown(
         """
         <div class="home-hero">
-          <div class="home-title">AI Engineering Learning App</div>
+          <div class="home-title">AI Engineering Learning Assistant</div>
           <p class="home-copy">
             Study AI engineering with grounded lessons, quizzes, progress tracking, and scoped help.
           </p>
