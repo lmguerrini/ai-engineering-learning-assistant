@@ -8,6 +8,7 @@ from src.ui.dashboard_page import (
     _build_capability_registry_rows,
     _check_ragas_available,
     _display_capability_registry_section,
+    _format_feedback_signal_message,
     _metric_color,
     _fmt_metric,
     _format_ragas_case_label,
@@ -138,6 +139,15 @@ class TestDashboardSnapshotHelpers:
     def test_ragas_case_label_uses_topic_mode_suffix_without_difficulty(self):
         case = MagicMock(topic="LangGraph", difficulty="", surface="topic_mode")
         assert _format_ragas_case_label(case) == "LangGraph (Topic Mode)"
+
+    def test_feedback_signal_message_is_human_readable(self):
+        assert _format_feedback_signal_message("increase_difficulty") == (
+            "Current feedback signal: increase difficulty based on saved feedback."
+        )
+        assert _format_feedback_signal_message("simplify") == (
+            "Current feedback signal: simplify upcoming explanations based on saved feedback."
+        )
+        assert _format_feedback_signal_message(None) is None
 
 
 # ---------------------------------------------------------------------------

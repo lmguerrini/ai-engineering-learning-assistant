@@ -88,6 +88,15 @@ def _format_dashboard_timestamp(value: str | None) -> str:
     return parsed.strftime("%Y-%m-%d %H:%M")
 
 
+def _format_feedback_signal_message(suggestion: str | None) -> str | None:
+    """Return a short reviewer-facing summary of the current feedback signal."""
+    if suggestion == "increase_difficulty":
+        return "Current feedback signal: increase difficulty based on saved feedback."
+    if suggestion == "simplify":
+        return "Current feedback signal: simplify upcoming explanations based on saved feedback."
+    return None
+
+
 def _build_capability_registry_rows(
     *,
     kb_health: dict,
@@ -127,9 +136,9 @@ def _build_capability_registry_rows(
             "Capability": "Memory Profile",
             "Status": "Active" if memory_loaded else "Ready",
             "Mode": "Optional",
-            "User Control": "Save quiz results",
+            "User Control": "Save in Learn/Quiz",
             "Used By": "Learn, Quiz, Progress, Dashboard",
-            "Description": "Uses stored learner history to personalize study, quizzes, and progress summaries.",
+            "Description": "Uses saved study sessions and quiz history to personalize study, quizzes, and progress summaries.",
         },
         {
             "Capability": "Feedback Logger",
@@ -880,7 +889,7 @@ def render_advanced() -> None:
     signal_cols[0].metric(
         "Memory Profile",
         "Loaded" if mem["loaded"] else "Empty",
-        help="Personalization becomes richer after saved quiz results and repeated study sessions accumulate.",
+        help="Personalization becomes richer after saved Learn study sessions and quiz results accumulate.",
     )
     signal_cols[1].metric(
         "Feedback Entries",
@@ -992,7 +1001,7 @@ def render_advanced() -> None:
             )
         else:
             st.info(
-                "No saved learning memory yet. Save quiz results to populate progress trends, weak areas, and suggested focus."
+                "No saved learning memory yet. Save a Learn study session or quiz result to populate progress trends, weak areas, and suggested focus."
             )
     with feedback_col:
         st.markdown("#### Feedback Signals")
@@ -1005,6 +1014,9 @@ def render_advanced() -> None:
                 f"| Total Entries | {fb_summary['total_count']} |\n"
                 f"| Suggestion | {suggestion} |"
             )
+            human_signal = _format_feedback_signal_message(fb_summary.get("suggestion"))
+            if human_signal:
+                st.caption(human_signal)
             with st.expander("Raw feedback details"):
                 st.json(fb_summary)
         else:

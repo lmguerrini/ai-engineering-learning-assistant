@@ -85,7 +85,10 @@ def _display_hitl_save(eval_result: dict) -> None:
                         topic=memory_candidate.get("topic", ""),
                         score=memory_candidate.get("score", 0),
                         weak_areas=memory_candidate.get("weak_areas", []),
-                        metadata={"source": "quiz_evaluation"},
+                        metadata={
+                            "source": "quiz_evaluation",
+                            "difficulty": st.session_state.get("quiz_difficulty", "").capitalize(),
+                        },
                     )
                     st.session_state[save_key] = True
                 except Exception:
@@ -201,5 +204,15 @@ def render_quiz() -> None:
             _display_quiz_results(eval_result)
             _display_hitl_save(eval_result)
 
-        _display_feedback_widget("quiz", st.session_state.get("quiz_selected_topic", topic))
+        quiz_topic = st.session_state.get("quiz_selected_topic", topic)
+        quiz_difficulty = st.session_state.get("quiz_difficulty", difficulty).capitalize()
+        _display_feedback_widget(
+            "quiz",
+            quiz_topic,
+            metadata={
+                "difficulty": quiz_difficulty,
+                "context_title": quiz_topic,
+            },
+            result_signature=f"Quiz | {quiz_topic} | {quiz_difficulty}",
+        )
         _display_debug_trace(eval_result, "Quiz Evaluation Trace")
