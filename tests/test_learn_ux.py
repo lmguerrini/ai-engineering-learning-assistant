@@ -103,6 +103,37 @@ class TestLearnPathMode:
             assert len(t) > 2
 
 
+class TestHomePagePolish:
+    """Home page should stay reviewer-friendly and visually structured."""
+
+    def test_home_page_has_polished_hero_and_ctas(self):
+        with open("src/ui/pages.py") as f:
+            source = f.read()
+
+        assert 'def _set_active_section(section: str)' in source
+        assert 'def _render_home_feature_card(title: str, body: str)' in source
+        assert "AI Engineering Learning Assistant" in source
+        assert "Study AI engineering with grounded lessons, quizzes, progress tracking, and scoped help." in source
+        assert 'st.button("Start Learning"' in source
+        assert 'st.button("Take a Quiz"' in source
+        assert 'st.button("Open Dashboard"' in source
+        assert "reviewer" not in source.lower()
+        assert "best review path" not in source.lower()
+        assert "what this demo highlights" not in source.lower()
+
+    def test_home_page_highlights_core_workflows_and_review_path(self):
+        with open("src/ui/pages.py") as f:
+            source = f.read()
+
+        assert 'st.markdown("#### Explore")' in source
+        assert '"Learn"' in source
+        assert '"Quiz"' in source
+        assert '"Progress"' in source
+        assert '"Help Assistant"' in source
+        assert '"Dashboard"' in source
+        assert "Runtime status:" in source
+
+
 class TestPromptStyleDifferentiation:
     """Summary vs Deep Study prompts should differ strongly."""
 
