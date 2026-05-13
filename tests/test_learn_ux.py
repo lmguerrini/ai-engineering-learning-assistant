@@ -112,7 +112,7 @@ class TestHomePagePolish:
 
         assert 'def _set_active_section(section: str)' in source
         assert 'def _render_home_feature_card(title: str, body: str)' in source
-        assert "AI Engineering Learning Assistant" in source
+        assert "AI Engineering Learning App" in source
         assert "Study AI engineering with grounded lessons, quizzes, progress tracking, and scoped help." in source
         assert 'st.button("Start Learning"' in source
         assert 'st.button("Take a Quiz"' in source
@@ -1009,7 +1009,7 @@ class TestSidebarStatus:
         kb_status = 'st.caption(f"KB Index: {_kb_status}")'
         external_docs = 'st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")'
         ragas_status = 'st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")'
-        help_assistant_style = 'f"Agent Personality: "'
+        help_assistant_style = 'f"Help Assistant Personality: "'
         model_line = 'st.caption(f"Model: {_s.app_default_model}")'
         assert source.index(runtime_info) < source.index(kb_status)
         assert source.index(kb_status) < source.index(external_docs)
@@ -1022,7 +1022,7 @@ class TestSidebarStatus:
             source = f.read()
         assert "Official Docs Sync:" in source
         assert "RAGAs Evaluation:" in source
-        assert "Agent Personality:" in source
+        assert "Help Assistant Personality:" in source
         assert "Not updated" in source
         assert "Passed" in source
         assert "Needs review" in source

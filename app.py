@@ -170,7 +170,7 @@ with st.sidebar.expander("Runtime Info", expanded=True):
         st.caption(f"Official Docs Sync: {_get_sidebar_external_docs_status()}")
         st.caption(f"RAGAs Evaluation: {_get_sidebar_ragas_status()}")
         st.caption(
-            f"Agent Personality: "
+            f"Help Assistant Personality: "
             f"{st.session_state.get('help_assistant_personality_mode', 'Technical')}"
         )
         st.caption(f"Model: {_s.app_default_model}")
