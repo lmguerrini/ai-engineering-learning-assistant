@@ -136,7 +136,7 @@ class TestDashboardSnapshotHelpers:
         assert _format_ragas_case_label(case) == "AI Agents and Tool Calling (Advanced, Learn Path)"
 
     def test_ragas_case_label_uses_topic_mode_suffix_without_difficulty(self):
-        case = MagicMock(topic="LangGraph", difficulty="")
+        case = MagicMock(topic="LangGraph", difficulty="", surface="topic_mode")
         assert _format_ragas_case_label(case) == "LangGraph (Topic Mode)"
 
 
@@ -353,10 +353,8 @@ class TestDisplayRagasReport:
 
         markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list if call.args]
         assert any("Learn Path: 3 cached evaluated case(s)" in text for text in markdown_calls)
-        assert any("Topic Mode: 1 configured pending case" in text for text in markdown_calls)
-        assert any("Help Assistant: 2 configured pending case(s)" in text for text in markdown_calls)
         caption_calls = [str(c) for c in mock_st.caption.call_args_list]
-        assert any("Pending cases will be scored after running a fresh RAGAs evaluation." in c for c in caption_calls)
+        assert all("Pending cases will be scored after running a fresh RAGAs evaluation." not in c for c in caption_calls)
 
     @patch("src.ui.dashboard_page.st")
     def test_display_shows_borderline_variance_note(self, mock_st):
@@ -378,7 +376,7 @@ class TestDisplayRagasReport:
         _display_ragas_report(report)
 
         info_calls = [call.args[0] for call in mock_st.info.call_args_list if call.args]
-        assert info_calls.count("Not evaluated yet. Run a fresh RAGAs evaluation to generate metrics.") == 3
+        assert info_calls == []
 
     @patch("src.ui.dashboard_page.st")
     def test_display_restores_answer_correctness_only_inside_per_case_tables(self, mock_st):

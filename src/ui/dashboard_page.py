@@ -678,12 +678,14 @@ def _display_ragas_report(report) -> None:
     evaluated_topics = {result.topic for result in report.results}
     learn_path_evaluated = len(learn_path_topics & evaluated_topics)
     st.caption("Reviewer-facing summary of cached evaluated coverage vs configured pending cases.")
-    st.markdown(
-        f"- Learn Path: {learn_path_evaluated} cached evaluated case(s)\n"
-        f"- Topic Mode: {len(topic_mode_topics)} configured pending case\n"
-        f"- Help Assistant: {len(help_topics)} configured pending case(s)"
-    )
-    st.caption("Pending cases will be scored after running a fresh RAGAs evaluation.")
+    coverage_lines = [f"- Learn Path: {learn_path_evaluated} cached evaluated case(s)"]
+    if topic_mode_topics:
+        coverage_lines.append(f"- Topic Mode: {len(topic_mode_topics)} configured pending case")
+    if help_topics:
+        coverage_lines.append(f"- Help Assistant: {len(help_topics)} configured pending case(s)")
+    st.markdown("\n".join(coverage_lines))
+    if topic_mode_topics or help_topics:
+        st.caption("Pending cases will be scored after running a fresh RAGAs evaluation.")
 
     # ── Per-case breakdown ───────────────────────────────────────────
     st.markdown("#### Per-Case Breakdown")

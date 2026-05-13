@@ -1692,9 +1692,9 @@ class TestHelpAssistantUi:
         assert "| Dimension | Technical | Concise | Friendly | Formal |" in source
         assert "Current runtime values: Temperature=" not in source
         assert "Learn Path: {learn_path_evaluated} cached evaluated case(s)" in source
-        assert "Topic Mode: {len(topic_mode_topics)} configured pending case" in source
-        assert "Help Assistant: {len(help_topics)} configured pending case(s)" in source
-        assert "Pending cases will be scored after running a fresh RAGAs evaluation." in source
+        assert 'if topic_mode_topics:' in source
+        assert 'if help_topics:' in source
+        assert 'if topic_mode_topics or help_topics:' in source
 
     def test_dashboard_uses_neutral_answer_correctness_caption(self):
         with open("src/ui/dashboard_page.py") as f:
