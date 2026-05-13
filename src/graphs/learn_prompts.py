@@ -24,6 +24,8 @@ _LEARN_PATH_DEEP_STUDY_ENGINEERING_RULES = (
     "- Prefer clear operational reasoning over repeated definitions; explain engineering tradeoffs, architecture decisions, and when to use / when not to use the approach.\n"
     "- Include production failure modes and incident-style examples where relevant: scaling bottlenecks, latency/token tradeoffs, state explosion, retrieval precision/recall failures, vector DB fragmentation, and hallucination containment gaps.\n"
     "- Cover operational patterns where relevant: async orchestration, concurrency, streaming orchestration, retry/backoff strategies, MCP/tool safety, observability, and eval methodology.\n"
+    "- Examples should be minimal but real: prefer focused snippets with LangGraph nodes/checkpointers, LangChain retrievers, OpenAI client calls, vector DB operations, tracing hooks, retry/error boundaries, or deployment/runtime config.\n"
+    "- Avoid toy scaffolding and fake production code: do not use placeholder helpers like call_tool() or log_error(e), fake domains like api.example.com, or tutorial filler that pretends to be a complete app.\n"
     "- Use comparison tables or decision matrices when they clarify implementation choices.\n"
     "- Make review checklists operational: include measurable criteria for latency, cost, reliability, eval coverage, rollback, and monitoring.\n"
 )

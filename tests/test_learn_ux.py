@@ -260,6 +260,16 @@ class TestPromptStyleDifferentiation:
         assert "retry/backoff strategies" in prompt
         assert "MCP/tool safety" in prompt
         assert "eval methodology" in prompt
+        assert "Examples should be minimal but real" in prompt
+        assert "LangGraph nodes/checkpointers" in prompt
+        assert "LangChain retrievers" in prompt
+        assert "OpenAI client calls" in prompt
+        assert "vector DB operations" in prompt
+        assert "tracing hooks" in prompt
+        assert "deployment/runtime config" in prompt
+        assert "call_tool()" in prompt
+        assert "log_error(e)" in prompt
+        assert "api.example.com" in prompt
 
     def test_progressive_learn_path_deep_study_prompt_requires_system_connections(self):
         from src.graphs.learn_prompts import _build_progressive_learn_path_section_prompt
@@ -293,6 +303,10 @@ class TestPromptStyleDifferentiation:
         assert "eval methodology" in prompt
         assert "hallucination containment" in prompt
         assert "rather than overly niche or encyclopedia-like" in prompt
+        assert "Examples should be minimal but real" in prompt
+        assert "call_tool()" in prompt
+        assert "log_error(e)" in prompt
+        assert "api.example.com" in prompt
 
 
 class TestSnippetSanitization:
