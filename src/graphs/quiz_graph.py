@@ -29,8 +29,8 @@ from src.schemas import DifficultyLevel, QuizQuestion
 def _route_after_topic_context(state: QuizState) -> str:
     """Route to END if topic loading failed, otherwise continue."""
     if state.get("error"):
-        return "return_results"
-    return "load_user_memory"
+        return "error_path"
+    return "continue_path"
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,14 @@ def build_quiz_generation_graph() -> StateGraph:
     graph.add_node("return_results", return_results)
 
     graph.add_edge(START, "load_topic_context")
-    graph.add_conditional_edges("load_topic_context", _route_after_topic_context)
+    graph.add_conditional_edges(
+        "load_topic_context",
+        _route_after_topic_context,
+        path_map={
+            "error_path": "return_results",
+            "continue_path": "load_user_memory",
+        },
+    )
     graph.add_edge("load_user_memory", "generate_quiz")
     graph.add_edge("generate_quiz", "validate_quiz")
     graph.add_edge("validate_quiz", "return_results")

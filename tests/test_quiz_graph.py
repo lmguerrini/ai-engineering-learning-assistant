@@ -17,6 +17,7 @@ from src.graphs.quiz_nodes import (
     validate_quiz,
 )
 from src.graphs.quiz_graph import (
+    _route_after_topic_context,
     build_quiz_evaluation_graph,
     build_quiz_generation_graph,
     run_quiz_evaluation,
@@ -498,6 +499,10 @@ class TestGraphCompilation:
 # ===================================================================
 
 class TestGraphRouting:
+    def test_topic_context_route_labels_are_explicit(self):
+        assert _route_after_topic_context({"error": "missing topic"}) == "error_path"
+        assert _route_after_topic_context({"error": None}) == "continue_path"
+
     @patch("src.graphs.quiz_nodes.get_settings")
     def test_empty_topic_returns_error(self, mock_settings):
         """Empty topic should route through load_topic_context → return_results with error."""
