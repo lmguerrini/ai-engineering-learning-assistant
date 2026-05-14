@@ -9,6 +9,7 @@ import pytest
 from src.memory.db import get_connection
 from src.memory.memory_service import (
     LEARN_STUDIED_SOURCE,
+    QUIZ_EVALUATION_SOURCE,
     delete_learning_event,
     get_completed_learn_sessions,
     get_recent_topics,
@@ -243,6 +244,23 @@ class TestStudyProgressEvents:
         assert len(quizzes) == 1
         assert quizzes[0]["topic"] == "AI Agents"
 
+    def test_user_profile_summary_exposes_latest_quiz_weak_areas_and_focus_topics(self, tmp_db: Path) -> None:
+        save_learning_event(
+            topic="Agentic RAG",
+            score=67.0,
+            weak_areas=["Contextual relevance in RAG"],
+            metadata={"source": QUIZ_EVALUATION_SOURCE, "difficulty": "Intermediate"},
+            db_path=tmp_db,
+        )
+
+        profile = get_user_profile_summary(db_path=tmp_db)
+
+        assert profile["recent_weak_areas"] == ["Contextual relevance in RAG"]
+        assert profile["recurring_weak_areas"] == []
+        assert "Agentic RAG" in profile["suggested_focus_topics"]
+        assert "Building Applications with LangChain, RAGs, and Streamlit" in profile["suggested_focus_topics"]
+        assert "AI Agents" in profile["suggested_focus_topics"]
+
     def test_has_completed_learn_session_detects_duplicate(self, tmp_db: Path) -> None:
         save_learning_event(
             topic="AI Agents and Orchestration",
@@ -292,7 +310,7 @@ class TestStudyProgressEvents:
         event_id = save_learning_event(
             topic="AI Agents",
             score=78.0,
-            metadata={"source": "quiz_evaluation", "difficulty": "Intermediate"},
+            metadata={"source": QUIZ_EVALUATION_SOURCE, "difficulty": "Intermediate"},
             db_path=tmp_db,
         )
 
@@ -306,6 +324,42 @@ class TestStudyProgressEvents:
         quizzes = get_quiz_performance_events(db_path=tmp_db)
         assert len(quizzes) == 1
         assert quizzes[0]["id"] == event_id
+
+    def test_delete_learning_event_removes_quiz_row_when_quiz_source_matches(self, tmp_db: Path) -> None:
+        event_id = save_learning_event(
+            topic="AI Agents",
+            score=78.0,
+            metadata={"source": QUIZ_EVALUATION_SOURCE, "difficulty": "Intermediate"},
+            db_path=tmp_db,
+        )
+
+        deleted = delete_learning_event(
+            event_id,
+            source=QUIZ_EVALUATION_SOURCE,
+            db_path=tmp_db,
+        )
+
+        assert deleted is True
+        assert get_quiz_performance_events(db_path=tmp_db) == []
+
+    def test_delete_learning_event_does_not_remove_learn_rows_when_quiz_source_guarded(self, tmp_db: Path) -> None:
+        event_id = save_learning_event(
+            topic="Foundations of LLM Application Development",
+            score=0.0,
+            metadata={"source": LEARN_STUDIED_SOURCE},
+            db_path=tmp_db,
+        )
+
+        deleted = delete_learning_event(
+            event_id,
+            source=QUIZ_EVALUATION_SOURCE,
+            db_path=tmp_db,
+        )
+
+        assert deleted is False
+        completed = get_completed_learn_sessions(db_path=tmp_db)
+        assert len(completed) == 1
+        assert completed[0]["id"] == event_id
 
 
 # ---------------------------------------------------------------------------

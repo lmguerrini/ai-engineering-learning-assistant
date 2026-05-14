@@ -97,6 +97,15 @@ def _format_feedback_signal_message(suggestion: str | None) -> str | None:
     return None
 
 
+def _humanize_feedback_suggestion_label(suggestion: str | None) -> str:
+    """Return a reviewer-facing label for one feedback suggestion value."""
+    if suggestion == "increase_difficulty":
+        return "Increase difficulty"
+    if suggestion == "simplify":
+        return "Simplify explanations"
+    return "—"
+
+
 def _build_capability_registry_rows(
     *,
     kb_health: dict,
@@ -1006,7 +1015,7 @@ def render_advanced() -> None:
     with feedback_col:
         st.markdown("#### Feedback Signals")
         if fb_summary.get("total_count", 0) > 0:
-            suggestion = fb_summary.get("suggestion", "—") or "—"
+            suggestion = _humanize_feedback_suggestion_label(fb_summary.get("suggestion"))
             st.markdown(
                 f"| Field | Value |\n"
                 f"|---|---|\n"

@@ -108,6 +108,7 @@ def render_progress() -> None:
     from src.memory.feedback_service import delete_feedback, get_feedback_summary, get_recent_feedback
     from src.memory.memory_service import (
         LEARN_STUDIED_SOURCE,
+        QUIZ_EVALUATION_SOURCE,
         delete_learning_event,
         get_completed_learn_sessions,
         get_quiz_performance_events,
@@ -144,6 +145,9 @@ def render_progress() -> None:
                 st.caption(display["date"])
                 st.markdown(f"**{display['context_title']}**")
                 st.markdown(display["detail"])
+                if st.button("🗑️ Delete", key=f"delete_quiz_event_{evt['id']}"):
+                    delete_learning_event(int(evt["id"]), source=QUIZ_EVALUATION_SOURCE)
+                    st.rerun()
 
         profile = get_user_profile_summary()
         st.markdown("#### Aggregate Signals")

@@ -172,6 +172,30 @@ def format_graph_state_summary(result: dict) -> list[dict]:
 
     Returns a list of {label, value} dicts.
     """
+    def _resolve_memory_loaded() -> bool:
+        if not result:
+            return False
+
+        profile = result.get("memory_profile")
+        if format_memory_transparency(profile)["loaded"]:
+            return True
+
+        try:
+            from src.memory.feedback_service import get_feedback_summary
+            from src.memory.memory_service import (
+                get_completed_learn_sessions,
+                get_user_profile_summary,
+            )
+
+            live_profile = get_user_profile_summary()
+            live_profile["completed_learn_sessions"] = get_completed_learn_sessions(limit=3)
+            feedback_summary = get_feedback_summary()
+            live_profile["feedback_summary"] = feedback_summary
+            live_profile["feedback_suggestion"] = feedback_summary.get("suggestion")
+            return format_memory_transparency(live_profile)["loaded"]
+        except Exception:
+            return False
+
     fields = []
 
     if result.get("topic"):
@@ -196,7 +220,7 @@ def format_graph_state_summary(result: dict) -> list[dict]:
     if result.get("query_refined"):
         fields.append({"label": "Query Refined", "value": "Yes"})
 
-    if result.get("memory_profile"):
+    if _resolve_memory_loaded():
         fields.append({"label": "Memory Profile", "value": "Loaded"})
     else:
         fields.append({"label": "Memory Profile", "value": "Not available"})
@@ -222,7 +246,7 @@ def format_memory_transparency(memory_profile: dict | None) -> dict:
     result = {
         "loaded": True,
         "recent_topics": memory_profile.get("recent_topics", []),
-        "weak_areas": memory_profile.get("recurring_weak_areas", []),
+        "weak_areas": memory_profile.get("recurring_weak_areas", []) or memory_profile.get("recent_weak_areas", []),
         "average_score": memory_profile.get("average_score"),
         "suggested_focus": memory_profile.get("suggested_focus_topics", []),
         "preferred_style": memory_profile.get("preferred_style"),

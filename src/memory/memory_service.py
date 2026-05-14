@@ -13,6 +13,7 @@ from loguru import logger
 from src.memory.db import get_connection
 
 LEARN_STUDIED_SOURCE = "learn_studied"
+QUIZ_EVALUATION_SOURCE = "quiz_evaluation"
 
 
 def _deserialize_learning_event(row: sqlite3.Row) -> dict[str, Any]:
@@ -206,6 +207,7 @@ def get_user_profile_summary(db_path: Path | None = None) -> dict[str, Any]:
         if not rows:
             return {
                 "recent_topics": [],
+                "recent_weak_areas": [],
                 "recurring_weak_areas": [],
                 "average_score": None,
                 "preferred_style": None,
@@ -237,6 +239,8 @@ def get_user_profile_summary(db_path: Path | None = None) -> dict[str, Any]:
         scored_events = [event for event in events if _is_scored_learning_event(event)]
         scores = [event["score"] for event in scored_events]
         average_score = round(sum(scores) / len(scores), 1) if scores else None
+        latest_scored_event = scored_events[0] if scored_events else None
+        recent_weak_areas = list(dict.fromkeys((latest_scored_event or {}).get("weak_areas", [])))
 
         # Suggested focus topics: topics whose latest score is below average
         suggested: list[str] = []
@@ -253,6 +257,27 @@ def get_user_profile_summary(db_path: Path | None = None) -> dict[str, Any]:
             if area not in suggested:
                 suggested.append(area)
 
+        # Preserve quiz-page suggested topics when available; otherwise derive
+        # dashboard-safe focus topics from the latest saved quiz weak areas.
+        latest_metadata = (latest_scored_event or {}).get("metadata", {}) or {}
+        stored_suggested_topics = latest_metadata.get("suggested_topics", []) or []
+        for topic in stored_suggested_topics:
+            if topic not in suggested:
+                suggested.append(topic)
+
+        if recent_weak_areas:
+            try:
+                from src.graphs.quiz_nodes import _map_weak_area_to_study_topics
+
+                for area in recent_weak_areas:
+                    for topic in _map_weak_area_to_study_topics(area):
+                        if topic not in suggested:
+                            suggested.append(topic)
+            except Exception:
+                for area in recent_weak_areas:
+                    if area not in suggested:
+                        suggested.append(area)
+
         logger.debug(
             "User profile: {} recent topics, {} recurring weak areas, avg={}, {} focus topics",
             len(recent_topics), len(recurring_weak_areas), average_score, len(suggested),
@@ -260,6 +285,7 @@ def get_user_profile_summary(db_path: Path | None = None) -> dict[str, Any]:
 
         return {
             "recent_topics": recent_topics,
+            "recent_weak_areas": recent_weak_areas,
             "recurring_weak_areas": recurring_weak_areas,
             "average_score": average_score,
             "preferred_style": None,

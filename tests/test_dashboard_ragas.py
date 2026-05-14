@@ -9,6 +9,7 @@ from src.ui.dashboard_page import (
     _check_ragas_available,
     _display_capability_registry_section,
     _format_feedback_signal_message,
+    _humanize_feedback_suggestion_label,
     _metric_color,
     _fmt_metric,
     _format_ragas_case_label,
@@ -148,6 +149,11 @@ class TestDashboardSnapshotHelpers:
             "Current feedback signal: simplify upcoming explanations based on saved feedback."
         )
         assert _format_feedback_signal_message(None) is None
+
+    def test_feedback_signal_label_is_humanized_for_visible_tables(self):
+        assert _humanize_feedback_suggestion_label("increase_difficulty") == "Increase difficulty"
+        assert _humanize_feedback_suggestion_label("simplify") == "Simplify explanations"
+        assert _humanize_feedback_suggestion_label(None) == "—"
 
 
 # ---------------------------------------------------------------------------
