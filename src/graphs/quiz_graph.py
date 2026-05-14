@@ -88,6 +88,7 @@ def run_quiz_generation(
     difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE,
     num_questions: int = 5,
     study_guide_context: str = "",
+    force_regenerate: bool = False,
 ) -> QuizState:
     """Generate a quiz and return the state with questions.
 
@@ -101,6 +102,7 @@ def run_quiz_generation(
             "difficulty": difficulty,
             "num_questions": num_questions,
             "study_guide_context": study_guide_context,
+            "force_regenerate": force_regenerate,
             "trace": [],
             "token_usage": {},
         }

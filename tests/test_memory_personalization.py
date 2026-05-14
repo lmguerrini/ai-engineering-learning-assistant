@@ -240,8 +240,9 @@ class TestBuildSuggestedTopics:
     def test_from_weak_areas_only(self):
         state: QuizState = {"trace": []}
         topics = _build_suggested_topics(["planning", "embeddings"], state)
-        assert "planning" in topics
-        assert "embeddings" in topics
+        assert "AI Agents" in topics
+        assert "ReAct Pattern" in topics
+        assert "Agentic RAG" in topics
 
     def test_from_memory_profile(self):
         state: QuizState = {
@@ -252,8 +253,8 @@ class TestBuildSuggestedTopics:
             "trace": [],
         }
         topics = _build_suggested_topics([], state)
-        assert "RAG" in topics
-        assert "chunking" in topics
+        assert "Agentic RAG" in topics
+        assert "Building Applications with LangChain, RAGs, and Streamlit" in topics
 
     def test_deduplication(self):
         state: QuizState = {
@@ -264,7 +265,7 @@ class TestBuildSuggestedTopics:
             "trace": [],
         }
         topics = _build_suggested_topics(["planning"], state)
-        assert topics.count("planning") == 1
+        assert topics.count("AI Agents") == 1
 
     def test_max_10_topics(self):
         state: QuizState = {"trace": []}
@@ -298,7 +299,7 @@ class TestExtractWeakAreasWithSuggestedTopics:
         }
         result = extract_weak_areas(state)
         assert "suggested_topics" in result
-        assert "planning" in result["suggested_topics"]
+        assert "AI Agents" in result["suggested_topics"]
 
 
 # ===================================================================

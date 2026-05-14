@@ -16,6 +16,7 @@ class QuizState(TypedDict, total=False):
     difficulty: DifficultyLevel
     num_questions: int
     study_guide_context: str
+    force_regenerate: bool
 
     # --- Memory ---
     user_memory: dict[str, Any]
@@ -29,6 +30,9 @@ class QuizState(TypedDict, total=False):
     # --- Evaluation ---
     user_answers: list[str]
     per_question_correct: list[bool]
+    per_question_feedback: list[dict[str, Any]]
+    correct_count: int
+    total_questions: int
     score: float
     explanations: list[str]
     weak_areas: list[str]

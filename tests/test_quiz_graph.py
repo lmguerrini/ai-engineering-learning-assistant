@@ -118,6 +118,48 @@ class TestLoadUserMemory:
 @patch("src.graphs.quiz_nodes.set_cached_value")
 class TestGenerateQuiz:
     @patch("src.graphs.quiz_nodes.get_settings")
+    @patch("src.graphs.quiz_nodes.OpenAI")
+    @patch(
+        "src.graphs.quiz_nodes.get_cached_value",
+        return_value=[
+            {
+                "question": "Cached question?",
+                "options": ["A) one", "B) two", "C) three", "D) four"],
+                "correct_answer": "A) one",
+                "explanation": "Cached explanation.",
+            }
+        ],
+    )
+    def test_force_regenerate_bypasses_cache(self, mock_cache_get, mock_openai_cls, mock_settings, _cache_set, _cache_get):
+        mock_settings.return_value = MagicMock(openai_api_key="sk-test", app_default_model="gpt-4o-mini")
+        questions_data = {
+            "questions": [
+                {
+                    "question": "Fresh question?",
+                    "options": ["A) one", "B) two", "C) three", "D) four"],
+                    "correct_answer": "A) one",
+                    "explanation": "Fresh explanation.",
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content=json.dumps(questions_data)))]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        mock_openai_cls.return_value.chat.completions.create.return_value = mock_response
+
+        state = {
+            "topic": "AI Agents",
+            "num_questions": 1,
+            "force_regenerate": True,
+            "trace": [],
+            "token_usage": {},
+        }
+        result = generate_quiz(state)
+        assert result["questions"][0].question == "Fresh question?"
+        assert any("bypassing cache" in t for t in result["trace"])
+        mock_openai_cls.return_value.chat.completions.create.assert_called_once()
+
+    @patch("src.graphs.quiz_nodes.get_settings")
     def test_fallback_when_no_api_key(self, mock_settings, _cache_set, _cache_get):
         mock_settings.return_value = MagicMock(openai_api_key="")
         state = {"topic": "AI Agents", "trace": [], "token_usage": {}}
@@ -280,6 +322,22 @@ class TestEvaluateAnswers:
         result = evaluate_answers(state)
         assert result["score"] == 50.0
         assert result["per_question_correct"] == [True, False, True, False]
+        assert result["correct_count"] == 2
+        assert result["total_questions"] == 4
+
+    def test_per_question_feedback_contains_selected_and_correct_answers(self):
+        questions = _make_questions(2)
+        state = {
+            "topic": "AI",
+            "questions": questions,
+            "user_answers": [questions[0].correct_answer, "wrong"],
+            "trace": [],
+        }
+        result = evaluate_answers(state)
+        assert len(result["per_question_feedback"]) == 2
+        assert result["per_question_feedback"][0]["correct"] is True
+        assert result["per_question_feedback"][1]["selected_answer"] == "wrong"
+        assert result["per_question_feedback"][1]["correct_answer"] == questions[1].correct_answer
 
     def test_incomplete_answers_padded(self):
         questions = _make_questions(3)
@@ -370,6 +428,35 @@ class TestExtractWeakAreas:
         result = extract_weak_areas(state)
         assert any("review" in s.lower() or "weak" in s.lower() for s in result["suggested_next_steps"])
 
+    def test_wrong_rag_question_uses_concise_weak_area_label(self):
+        questions = [
+            QuizQuestion(
+                question="Which benefit of agentic RAG most improves contextual relevance in retrieved answers?",
+                options=["A", "B", "C", "D"],
+                correct_answer="A",
+                explanation="Agentic RAG can improve contextual relevance through adaptive retrieval decisions.",
+            )
+        ]
+        state = {
+            "topic": "Agentic RAG",
+            "questions": questions,
+            "per_question_correct": [False],
+            "score": 0.0,
+            "quiz_result": QuizResult(topic="AI", total_questions=1, correct_count=0, score_percent=0.0),
+            "trace": [],
+        }
+        result = extract_weak_areas(state)
+        assert result["weak_areas"] == ["Agentic RAG benefits"]
+        assert questions[0].question not in result["weak_areas"]
+
+    def test_suggested_topics_map_to_study_topics_not_question_text(self):
+        state = {"memory_profile": {}, "trace": []}
+        question_text = "Which benefit of agentic RAG most improves contextual relevance in retrieved answers?"
+        topics = _build_suggested_topics(["Contextual relevance in RAG", question_text], state)
+        assert "Agentic RAG" in topics
+        assert "Building Applications with LangChain, RAGs, and Streamlit" in topics
+        assert question_text not in topics
+
 
 # ===================================================================
 # Memory candidate + return_results
@@ -429,6 +516,19 @@ class TestGraphRouting:
         assert len(questions) >= 1
         trace = result.get("trace", [])
         assert any("fallback" in t for t in trace)
+
+    @patch("src.graphs.quiz_graph.build_quiz_generation_graph")
+    def test_run_quiz_generation_passes_force_regenerate_flag(self, mock_build_graph):
+        app = MagicMock()
+        app.invoke.return_value = {"questions": []}
+        graph = MagicMock()
+        graph.compile.return_value = app
+        mock_build_graph.return_value = graph
+
+        run_quiz_generation(topic="AI Agents", force_regenerate=True)
+
+        initial_state = app.invoke.call_args.args[0]
+        assert initial_state["force_regenerate"] is True
 
     def test_evaluation_graph_scores_correctly(self):
         """Evaluation graph should compute correct score for given answers."""

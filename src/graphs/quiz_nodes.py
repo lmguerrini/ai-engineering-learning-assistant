@@ -21,6 +21,36 @@ from src.services.retry import with_retry
 _DEFAULT_NUM_QUESTIONS = 5
 # Required minimum number of options per question
 _MIN_OPTIONS = 3
+_QUIZ_TOPIC_SUGGESTIONS = [
+    (
+        ("rag", "retrieval", "vector", "embedding", "context", "chunk"),
+        ["Agentic RAG", "Building Applications with LangChain, RAGs, and Streamlit", "AI Agents"],
+    ),
+    (
+        ("tool", "function"),
+        ["Tool Calling", "AI Agents", "ReAct Pattern"],
+    ),
+    (
+        ("langgraph", "state", "checkpoint"),
+        ["LangGraph", "State Management", "AI Agents and Orchestration"],
+    ),
+    (
+        ("memory",),
+        ["Long-Term Memory", "AI Agents and Orchestration"],
+    ),
+    (
+        ("human", "approval"),
+        ["Human-in-the-Loop", "AI Agents"],
+    ),
+    (
+        ("observability", "trace"),
+        ["Observability", "LangGraph"],
+    ),
+    (
+        ("agent", "planning", "reasoning"),
+        ["AI Agents", "ReAct Pattern", "Tool Calling"],
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -152,17 +182,21 @@ def generate_quiz(state: QuizState) -> dict:
     trace = list(state.get("trace", []))
     trace.append("generate_quiz: started")
     token_usage = dict(state.get("token_usage", {}))
+    force_regenerate = bool(state.get("force_regenerate", False))
 
     # --- Check cache ---
     cache_key = _build_quiz_cache_key(state)
-    cached = get_cached_value(cache_key)
-    if cached is not None:
-        try:
-            questions = [QuizQuestion(**q) for q in cached]
-            trace.append("generate_quiz: cache hit")
-            return {"questions": questions, "trace": trace, "token_usage": token_usage}
-        except Exception:
-            pass  # invalid cache entry — continue to LLM
+    if force_regenerate:
+        trace.append("generate_quiz: bypassing cache")
+    else:
+        cached = get_cached_value(cache_key)
+        if cached is not None:
+            try:
+                questions = [QuizQuestion(**q) for q in cached]
+                trace.append("generate_quiz: cache hit")
+                return {"questions": questions, "trace": trace, "token_usage": token_usage}
+            except Exception:
+                pass  # invalid cache entry — continue to LLM
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -292,6 +326,7 @@ def evaluate_answers(state: QuizState) -> dict:
 
     per_correct: list[bool] = []
     explanations: list[str] = []
+    per_question_feedback: list[dict[str, Any]] = []
 
     for i, q in enumerate(questions):
         answer = padded_answers[i] if i < len(padded_answers) else ""
@@ -299,6 +334,16 @@ def evaluate_answers(state: QuizState) -> dict:
         per_correct.append(is_correct)
         status = "✅ Correct" if is_correct else f"❌ Incorrect (correct: {q.correct_answer})"
         explanations.append(f"Q{i + 1}: {status} — {q.explanation}")
+        per_question_feedback.append(
+            {
+                "question_number": i + 1,
+                "question": q.question,
+                "selected_answer": answer,
+                "correct_answer": q.correct_answer,
+                "correct": is_correct,
+                "explanation": q.explanation,
+            }
+        )
 
     correct_count = sum(per_correct)
     total = len(questions)
@@ -317,6 +362,9 @@ def evaluate_answers(state: QuizState) -> dict:
     trace.append(f"evaluate_answers: {correct_count}/{total} correct ({score_pct:.0f}%)")
     return {
         "per_question_correct": per_correct,
+        "per_question_feedback": per_question_feedback,
+        "correct_count": correct_count,
+        "total_questions": total,
         "score": round(score_pct, 1),
         "explanations": explanations,
         "quiz_result": quiz_result,
@@ -333,26 +381,70 @@ def _build_suggested_topics(weak_areas: list[str], state: QuizState) -> list[str
     seen: set[str] = set()
     suggested: list[str] = []
 
-    # Add weak areas from this quiz
+    def _append_unique(items: list[str]) -> None:
+        for item in items:
+            if item not in seen:
+                seen.add(item)
+                suggested.append(item)
+
+    # Add mapped study topics from this quiz
     for area in weak_areas:
-        if area not in seen:
-            seen.add(area)
-            suggested.append(area)
+        _append_unique(_map_weak_area_to_study_topics(area))
 
     # Add focus topics from memory profile
     profile = state.get("memory_profile", {})
     for topic in profile.get("suggested_focus_topics", []):
-        if topic not in seen:
-            seen.add(topic)
-            suggested.append(topic)
+        _append_unique(_map_weak_area_to_study_topics(topic))
 
     # Add recurring weak areas from memory
     for area in profile.get("recurring_weak_areas", []):
-        if area not in seen:
-            seen.add(area)
-            suggested.append(area)
+        _append_unique(_map_weak_area_to_study_topics(area))
 
     return suggested[:10]
+
+
+def _map_weak_area_to_study_topics(weak_area: str) -> list[str]:
+    """Map one weak-area label to relevant app study topics or paths."""
+    text = weak_area.lower()
+    for keywords, topics in _QUIZ_TOPIC_SUGGESTIONS:
+        if any(keyword in text for keyword in keywords):
+            return topics
+    return [weak_area]
+
+
+def _derive_weak_area_label(question: QuizQuestion, topic: str) -> str:
+    """Return a concise deterministic weak-area label for one missed question."""
+    concept = (question.concept or "").strip()
+    if concept:
+        return concept.replace("_", " ").strip().title()
+
+    text = " ".join(
+        part for part in [question.question, question.explanation, topic] if part
+    ).lower()
+
+    if "rag" in text or "retrieval" in text or "vector" in text or "embedding" in text or "chunk" in text:
+        if "benefit" in text or "advantage" in text:
+            return "Agentic RAG benefits"
+        if "context" in text or "relevance" in text:
+            return "Contextual relevance in RAG"
+        if "vector" in text:
+            return "Vector database retrieval"
+        return "Retrieval-Augmented Generation"
+    if "tool" in text or "function" in text:
+        return "Tool calling"
+    if "langgraph" in text or "state" in text:
+        return "LangGraph state management"
+    if "memory" in text:
+        return "Long-term memory"
+    if "human" in text or "approval" in text:
+        return "Human-in-the-loop"
+    if "observability" in text or "trace" in text:
+        return "Observability"
+    if "react" in text:
+        return "ReAct pattern"
+    if "agent" in text or "planning" in text or "reasoning" in text:
+        return "AI agent design"
+    return f"{topic} fundamentals"
 
 
 # ---------------------------------------------------------------------------
@@ -370,8 +462,7 @@ def extract_weak_areas(state: QuizState) -> dict:
     weak_areas: list[str] = []
     for i, (q, correct) in enumerate(zip(questions, per_correct)):
         if not correct:
-            # Prefer concept field if available, otherwise fall back to question text
-            area = q.concept.strip() if q.concept and q.concept.strip() else q.question[:100]
+            area = _derive_weak_area_label(q, state.get("topic", "AI Engineering"))
             weak_areas.append(area)
 
     # Suggested next steps based on performance
