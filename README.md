@@ -1,312 +1,596 @@
 # AI Engineering Learning Assistant
 
-A guided educational AI agent that helps AI Engineering students study through a structured **Learn → Quiz → Feedback → Memory** workflow, powered by LangGraph, Agentic RAG, and OpenAI.
+AI-powered educational platform built with Streamlit, LangGraph, LangChain, OpenAI, and Agentic RAG workflows.
+
+The application combines:
+- AI-generated learning paths
+- LangGraph-based agent workflows
+- quiz generation and evaluation agents
+- long-term memory and personalization
+- Agentic RAG with ChromaDB
+- observability and evaluation workflows
+- external documentation enrichment
+- reviewer-visible workflow traces and analytics
+
+The project was built as the final project for the AI Agents Sprint at Turing College.
 
 ---
 
-## Problem Definition
+# Preview
 
-AI Engineering students face a vast, fragmented landscape of tools (LangChain, LangGraph, RAG, vector stores, evaluation frameworks) and need a structured, adaptive way to learn them. Traditional study resources are static and do not adapt to individual progress or knowledge gaps.
+![App preview](docs/app_home.png)
 
-This assistant solves this by providing:
-- **Personalized study guides** generated from a curated knowledge base using Agentic RAG
-- **Adaptive quizzes** that focus on weak areas identified through learning history
-- **Persistent memory** that tracks progress and adjusts difficulty over time
-- **Human-in-the-loop** approval before saving learning results
-
-## Target User
-
-AI Engineering students who need a structured way to build fluency across LLMs, agents, RAG, LangGraph, evaluation, and production deployment.
+The app includes:
+- Learn page with adaptive AI-generated study guides
+- Quiz page with agent-generated evaluations
+- Progress tracking and persistent learning memory
+- Dashboard with workflow traces and RAG evaluation visibility
+- Interactive Help Assistant
+- Agentic RAG with official-document enrichment
 
 ---
 
-## Architecture Overview
+# Problem Definition
 
+Learning AI Engineering concepts through static tutorials and disconnected quizzes makes it difficult to:
+- personalize study material
+- identify weak areas
+- track long-term progress
+- adapt explanations to user performance
+- evaluate whether retrieval systems are functioning correctly
+
+This project solves that problem by creating an AI learning assistant capable of:
+- generating adaptive learning paths
+- evaluating user understanding through AI-generated quizzes
+- persisting long-term learning memory
+- surfacing weak areas and suggested study topics
+- enriching responses with external technical documentation
+- exposing workflow transparency for debugging and evaluation
+
+The target users are:
+- beginner and intermediate AI Engineering students
+- developers learning LangChain/LangGraph concepts
+- users exploring AI agents and RAG systems
+
+---
+
+# Core Technologies
+
+- Python 3.11+
+- Streamlit
+- LangChain
+- LangGraph
+- OpenAI API
+- ChromaDB
+- Pydantic
+- Loguru
+- LangSmith
+- RAGAs
+- pytest
+
+## Architecture Style
+
+The application follows a hybrid agent architecture combining:
+- deterministic orchestration
+- LangGraph stateful workflows
+- LLM-based generation
+- persistent memory systems
+- retrieval-augmented generation
+- evaluation and observability pipelines
+
+This allows the system to remain:
+- inspectable
+- reproducible
+- adaptive
+- reviewer-friendly
+
+---
+
+# Project Structure
+
+```text
+.
+├── app.py                                  # Streamlit application entry point
+├── requirements.txt                        # Python dependencies
+├── .env.example                            # Example environment configuration
+├── scripts/                                # Helper scripts and utilities
+├── data/
+│   ├── chroma_db/                          # Persistent Chroma vector database
+│   ├── official_docs/                      # External documentation sources
+│   ├── ragas_eval/                         # RAGAs evaluation datasets and outputs
+│   └── raw/                                # Local learning documents and markdown knowledge base
+├── src/
+│   ├── config.py                           # Environment-backed configuration
+│   ├── logging_config.py                   # Loguru logging configuration
+│   ├── schemas.py                          # Shared Pydantic schemas
+│   ├── graphs/
+│   │   ├── learn_graph.py                  # LangGraph workflow for Learn mode
+│   │   ├── learn_nodes.py                  # Learn workflow nodes
+│   │   ├── learn_prompts.py                # Learn prompts and instructions
+│   │   ├── learn_state.py                  # Learn workflow state
+│   │   ├── quiz_graph.py                   # LangGraph workflow for Quiz mode
+│   │   ├── quiz_nodes.py                   # Quiz generation/evaluation nodes
+│   │   ├── quiz_prompts.py                 # Quiz prompts and evaluation prompts
+│   │   └── quiz_state.py                   # Quiz workflow state
+│   ├── kb/
+│   │   ├── ingestion.py                    # Knowledge-base ingestion pipeline
+│   │   ├── chunker.py                      # Chunking utilities
+│   │   ├── embeddings.py                   # OpenAI embeddings setup
+│   │   ├── retrieval.py                    # Agentic retrieval pipeline
+│   │   ├── vector_store.py                 # ChromaDB integration
+│   │   ├── official_docs.py                # Official documentation retrieval
+│   │   └── index_health.py                 # Index health and freshness checks
+│   ├── memory/
+│   │   ├── db.py                           # SQLite persistence layer
+│   │   ├── memory_service.py               # Long-term learning memory
+│   │   └── feedback_service.py             # Feedback persistence and analytics
+│   ├── services/
+│   │   ├── cache.py                        # Response and workflow caching
+│   │   ├── cost_tracker.py                 # Token and cost tracking
+│   │   ├── retry.py                        # Retry and resilience logic
+│   │   ├── observability.py                # LangSmith observability helpers
+│   │   ├── external_docs_updater.py        # External documentation enrichment
+│   │   └── help_assistant.py               # Interactive help assistant service
+│   ├── eval/
+│   │   ├── rag_evaluation.py               # Custom RAG evaluation workflow
+│   │   ├── ragas_evaluation.py             # RAGAs evaluation integration
+│   │   └── retrieval_validation.py         # Retrieval validation utilities
+│   ├── tools/                              # Tool-calling utilities and helpers
+│   ├── ui/
+│   │   ├── learn_page.py                   # Learn page UI
+│   │   ├── quiz_page.py                    # Quiz page UI
+│   │   ├── progress_page.py                # Progress tracking UI
+│   │   ├── dashboard_page.py               # Analytics and workflow dashboard
+│   │   ├── help_page.py                    # Help assistant UI
+│   │   ├── display_helpers.py              # Shared UI rendering helpers
+│   │   └── shared.py                       # Shared Streamlit UI utilities
+│   └── demo/
+│       └── review_examples.py              # Demo/review helper examples
+└── tests/
+    ├── test_learn_graph.py                 # Learn workflow tests
+    ├── test_quiz_graph.py                  # Quiz workflow tests
+    ├── test_memory_service.py              # Memory persistence tests
+    ├── test_dashboard_ragas.py             # Dashboard/RAGAs tests
+    ├── test_retrieval.py                   # Retrieval pipeline tests
+    └── test_*.py                           # Additional focused pytest suites
 ```
-┌─────────────────────────────────────────────────┐
-│                 Streamlit UI                     │
-│  Home │ Learn │ Quiz │ Progress │ Dashboard      │
-└────────┬──────────────┬─────────────────────────┘
-         │              │
-    ┌────▼────┐    ┌────▼────┐
-    │  Learn  │    │  Quiz   │     LangGraph
-    │  Graph  │    │  Graph  │     Workflows
-    └────┬────┘    └────┬────┘
-         │              │
-    ┌────▼──────────────▼────┐
-    │   KB Retrieval Layer   │
-    │  Curated + Official    │
-    │   Docs Fallback        │
-    └────────┬───────────────┘
-             │
-    ┌────────▼───────────────┐
-    │  Chroma Vector Store   │
-    └────────────────────────┘
-
-    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │   Memory     │  │   Feedback   │  │    Cache     │
-    │  (SQLite)    │  │  (SQLite)    │  │  (SQLite)    │
-    └──────────────┘  └──────────────┘  └──────────────┘
-```
-
-### Key Components
-
-| Layer | Description |
-|-------|-------------|
-| **Streamlit UI** | 5-section app: Home, Learn, Quiz, Progress, Dashboard |
-| **LangGraph Workflows** | Explicit state graphs for Learn and Quiz flows |
-| **KB Retrieval** | Curated KB (data/raw) + official docs fallback (data/official_docs) |
-| **Memory** | SQLite-based learning history with HITL approval |
-| **Services** | Cost tracking, retry, caching, feedback, observability |
 
 ---
 
-## LangGraph Learn Flow
+# Setup
 
-The Learn workflow is an explicit LangGraph StateGraph with 9 nodes:
+## Prerequisites
 
-1. **validate_input** — checks topic is non-empty
-2. **load_user_memory** — loads memory profile for personalization
-3. **retrieve_sources** — retrieves from curated KB via Chroma
-4. **assess_source_quality** — evaluates whether retrieved sources are sufficient
-5. **refine_query_if_needed** — if sources are insufficient, refines the query once
-6. **generate_study_guide** — calls OpenAI to produce a structured study guide
-7. **quality_check** — validates the generated guide
-8. **persist_learning_event_placeholder** — prepares data for memory (no DB write)
-9. **return_output** — packages the final result
+- Python 3.11+
+- OpenAI API key
 
-**Agentic RAG behavior:** After initial retrieval, the graph assesses source quality. If insufficient, it refines the query and retrieves again (up to 2 attempts), then generates from the best available sources. Official docs fallback enriches weak curated KB results.
-
-## LangGraph Quiz Flow
-
-Two separate LangGraph StateGraphs:
-
-**Generation graph:** `load_topic_context → load_user_memory → generate_quiz → validate_quiz → return_results`
-
-**Evaluation graph:** `evaluate_answers → extract_weak_areas → create_memory_candidate → return_results`
-
-- Scoring is **fully deterministic** (direct string comparison, no LLM)
-- Quiz validation enforces: question count, option count (≥3), correct answer in options, explanations present
-- Weak areas are extracted from incorrectly answered questions
-- Memory candidate is created but **not saved** until user approves (HITL)
-
-## Agentic RAG
-
-This is not a simple retrieve-and-generate pipeline. The Learn workflow implements Agentic RAG:
-
-1. **Retrieve** from curated KB
-2. **Assess** source quality (sufficient/insufficient)
-3. **Refine** the query if sources are insufficient
-4. **Re-retrieve** with refined query
-5. **Fallback** to official docs if curated KB is still weak
-6. **Generate** from the best combined source set
-
-This loop is controlled by an `attempts` counter (max 2) to prevent infinite retrieval cycles.
-
-## Curated KB + Official Docs Fallback
-
-- **Curated KB** (`data/raw/`): 14 Markdown files covering AI Agents, RAG, LangChain, LangGraph, prompt engineering, evaluation, memory, HITL, and production patterns. This is the primary retrieval source.
-- **Official Docs** (`data/official_docs/`): 14 curated reference summaries from official documentation (OpenAI, LangChain, LangGraph, LangSmith, Chroma, RAGAs, Streamlit, Pydantic, Loguru, and related support topics). Used as fallback enrichment only when curated KB context is insufficient.
-- **Separation**: Official docs are stored in a separate Chroma collection with `source_type="official_docs"` metadata. Domain-aware filtering prioritizes relevant official docs (e.g., LangGraph queries → LangGraph docs).
-
-## Memory + HITL
-
-- **SQLite memory** stores learning sessions: topic, score, weak areas, timestamp
-- **HITL pattern**: After quiz evaluation, the user sees a summary and chooses "Save" or "Skip" — memory is never written automatically
-- **Memory personalization**: Recent topics, recurring weak areas, and average score influence study guide generation and quiz difficulty
-- **Graph purity**: No DB writes inside graph nodes — writes happen only in the UI/service layer
-
-## Caching + Feedback Loop
-
-- **Cache** (SQLite): Study guides and quizzes are cached by topic + difficulty + style + memory profile hash. Cache entries have TTL and expire automatically.
-- **Feedback**: Users can rate (1–5) and comment on study guides and quiz results. Deterministic rules derive suggestions from feedback (e.g., low ratings → suggest simpler explanations, "too easy" comments → increase difficulty).
-- **Personalization effect**: Feedback summary is loaded during memory injection and influences prompt generation.
-
-## Token / Cost Tracking
-
-- Tracks prompt_tokens, completion_tokens, total_tokens, and estimated_cost_usd per LLM operation
-- OpenAI pricing constants for common models (gpt-4o-mini, gpt-4o, gpt-3.5-turbo)
-- Usage records are accumulated per session and displayed in Dashboard
-- Zero-value fallback when token usage is unavailable
-
-## LangSmith Observability
-
-- **Optional**: Tracing is disabled by default. Enable by setting `LANGCHAIN_TRACING_V2=true` and providing `LANGCHAIN_API_KEY`.
-- **Configuration**: `LANGCHAIN_PROJECT`, `LANGCHAIN_ENDPOINT` supported
-- **Safe no-op**: App runs normally without LangSmith credentials
-- **Visibility**: Dashboard shows tracing status, project name, endpoint, and API key warning if tracing is enabled but key is missing
-- **Graph logging**: Structured loguru logging at graph run start/end/error
-
-## Retrieval Validation + RAG Evaluation
-
-- **Eval cases**: `data/eval/retrieval_eval_cases.md` defines test queries with expected source filenames
-- **Retrieval validation** (`src/eval/retrieval_validation.py`): Parses eval cases, runs retrieval, reports hit rate and per-case pass/fail
-- **RAG evaluation** (`src/eval/rag_evaluation.py`): Extends retrieval validation with source coverage metrics and structured reporting
-- **CLI script**: `scripts/run_rag_eval.py` runs offline evaluation without requiring API keys
-- **RAGAs benchmark** (`src/eval/ragas_evaluation.py`): saves the latest benchmark locally, shows the cached report in Dashboard, and can be rerun manually with the **Run RAGAs Evaluation** button when an OpenAI API key is configured.
-
----
-
-## How to Run the App
+## Installation
 
 ```bash
-# 1. Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate
-
-# 2. Install dependencies
 pip install -r requirements.txt
+```
 
-# 3. Copy and configure environment variables
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+## Environment Variables
 
-# 4. Run the app
+Create a `.env` file based on `.env.example`.
+
+Example:
+
+```bash
+OPENAI_API_KEY=your_api_key_here
+```
+
+Optional settings include:
+- embedding model
+- Chroma persistence directory
+- LangSmith configuration
+- OpenAI model selection
+- caching configuration
+
+---
+
+# Run the Application
+
+```bash
 streamlit run app.py
 ```
 
-The app opens at `http://localhost:8501` with five sections: Home, Learn, Quiz, Progress, and Dashboard.
-
-## How to Run Tests
-
-```bash
-# Run the full test suite in the review-safe configuration
-unset LANGCHAIN_API_KEY LANGCHAIN_ENDPOINT LANGCHAIN_PROJECT LANGCHAIN_TRACING_V2
-unset LANGSMITH_API_KEY LANGSMITH_ENDPOINT LANGSMITH_PROJECT LANGSMITH_TRACING
-python -m pytest tests/ -x -q
-
-# Run a specific test file
-python -m pytest tests/test_learn_graph.py -v
-
-# Run tests with coverage (if pytest-cov is installed)
-python -m pytest tests/ --cov=src -v
-```
-
-Tests do not require OpenAI API keys — all LLM calls are mocked.
-
-## How to Run Retrieval / RAG Evaluation
-
-```bash
-# Dry-run evaluation (no API key needed, uses mock retrieval)
-python scripts/run_rag_eval.py
-
-# Evaluation against real vector store (requires ingested KB + API key)
-python scripts/run_rag_eval.py --real --top-k 10
-```
-
-## How to Refresh Official Docs
-
-```bash
-# List registered official doc sources
-python scripts/refresh_official_docs.py --list
-
-# Dry-run (show what would be refreshed without downloading)
-python scripts/refresh_official_docs.py --dry-run
-
-# Refresh all official docs
-python scripts/refresh_official_docs.py
-```
-
-The refresh script fetches from official documentation URLs and updates files under `data/official_docs/`. It does not run during normal app startup.
+The app automatically initializes:
+- LangGraph workflows
+- Chroma vector store
+- SQLite memory
+- evaluation systems
+- dashboard services
 
 ---
 
-## Optional Tasks Implemented
+# Run Tests
 
-| Task | Status | Notes |
-|------|--------|-------|
-| Multi-agent orchestration (LangGraph Learn + Quiz) | ✅ | Two explicit StateGraph workflows |
-| Agentic RAG with source assessment + refinement | ✅ | Quality loop with max 2 attempts |
-| Knowledge base from official docs | ✅ | 14 curated official doc summaries |
-| RAG evaluation | ✅ | Deterministic offline eval + RAGAs-ready |
-| Long-term memory (SQLite) | ✅ | Learning history with weak area tracking |
-| Human-in-the-loop | ✅ | Save/skip approval for quiz results |
-| Caching | ✅ | SQLite cache with TTL for guides/quizzes |
-| Token/cost tracking | ✅ | Per-operation tracking with session summary |
-| LangSmith observability | ✅ | Optional tracing with safe fallback |
-| Feedback loop | ✅ | Rating + comments → personalization rules |
-| Memory-based personalization | ✅ | Weak areas, score, topics influence generation |
+```bash
+pytest
+```
 
-## Limitations
-
-- **No live web scraping**: Official docs are refreshed manually via script, not during app runtime.
-- **Single-user**: No authentication or multi-user session management.
-- **LLM dependency**: Study guide and quiz generation require a valid OpenAI API key. Fallback behavior provides basic placeholder content.
-- **RAGAs reruns cost money**: Fresh content-quality evaluations require an OpenAI API key and make judge-model API calls.
-- **No streaming**: LLM responses are generated in full before display.
-
-## Future Improvements
-
-- Add historical RAGAs benchmark tracking and trend comparison
-- Add streaming LLM responses for better UX
-- Implement spaced repetition scheduling based on memory data
-- Add multi-user support with session isolation
-- Expand curated KB with additional AI Engineering topics
-- Add automated KB refresh scheduling
-- Implement LangSmith dashboard integration for production monitoring
+Latest project state:
+- 738 passing tests
 
 ---
 
-## Tech Stack
+## LangGraph Agent Workflows
 
-- **Python** · **Streamlit** · **LangGraph** · **LangChain** · **OpenAI**
-- **ChromaDB** · **SQLite** · **Pydantic** · **pydantic-settings**
-- **Loguru** · **Pytest**
+The application is built around multiple LangGraph workflows that coordinate retrieval, memory loading, evaluation, validation, and adaptive generation.
 
-## Project Structure
+### Learn Agentic RAG Graph
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	validate_input(validate_input)
+	load_user_memory(load_user_memory)
+	retrieve_sources(retrieve_sources)
+	assess_source_quality(assess_source_quality)
+	refine_query_if_needed(refine_query_if_needed)
+	generate_study_guide(generate_study_guide)
+	quality_check(quality_check)
+	persist_learning_event_placeholder(persist_learning_event_placeholder)
+	return_output(return_output)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> validate_input;
+	assess_source_quality -. generate_path .-> generate_study_guide;
+	assess_source_quality -. refine_path .-> refine_query_if_needed;
+	generate_study_guide --> quality_check;
+	load_user_memory --> retrieve_sources;
+	persist_learning_event_placeholder --> return_output;
+	quality_check --> persist_learning_event_placeholder;
+	refine_query_if_needed --> retrieve_sources;
+	retrieve_sources --> assess_source_quality;
+	validate_input -. success_path .-> load_user_memory;
+	validate_input -. error_path .-> return_output;
+	return_output --> __end__;
+	classDef default fill:#f8fafc,color:#111827,stroke:#94a3b8,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#0f172a,color:#fff
+```
+
+### Quiz Generation Graph
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	load_topic_context(load_topic_context)
+	load_user_memory(load_user_memory)
+	generate_quiz(generate_quiz)
+	validate_quiz(validate_quiz)
+	return_results(return_results)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> load_topic_context;
+	load_topic_context --> load_user_memory;
+	load_user_memory --> generate_quiz;
+	generate_quiz --> validate_quiz;
+	validate_quiz -. validation_failed .-> generate_quiz;
+	validate_quiz -. validation_passed .-> return_results;
+	return_results --> __end__;
+	classDef default fill:#f8fafc,color:#111827,stroke:#94a3b8,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#0f172a,color:#fff
 
 ```
-app.py                          # Streamlit entrypoint
-src/
-  config.py                     # pydantic-settings configuration
-  logging_config.py             # Loguru logging setup
-  schemas.py                    # Core Pydantic schemas
-  ui/
-    pages.py                    # Streamlit page renderers
-    display_helpers.py          # Reusable UI formatting helpers
-  graphs/
-    learn_state.py              # Learn workflow typed state
-    learn_nodes.py              # Learn workflow node functions
-    learn_graph.py              # Learn StateGraph definition
-    quiz_state.py               # Quiz workflow typed state
-    quiz_nodes.py               # Quiz workflow node functions
-    quiz_graph.py               # Quiz StateGraph definitions
-  kb/
-    loader.py                   # Document loading from data/raw
-    chunker.py                  # Text splitting with overlap
-    embeddings.py               # OpenAI embeddings wrapper
-    vector_store.py             # Chroma vector store operations
-    ingestion.py                # End-to-end ingestion pipeline
-    retrieval.py                # Document retrieval
-    official_docs.py            # Official docs loading/retrieval/fallback
-  memory/
-    db.py                       # SQLite database initialization
-    memory_service.py           # Learning memory CRUD
-    feedback_service.py         # Feedback storage and summary
-  services/
-    cost_tracker.py             # Token/cost tracking
-    retry.py                    # Retry utility with backoff
-    cache.py                    # SQLite caching service
-    observability.py            # LangSmith tracing configuration
-  eval/
-    retrieval_validation.py     # Retrieval eval case validation
-    rag_evaluation.py           # Offline RAG evaluation
-  demo/
-    review_examples.py          # Curated demo topics
-  tools/                        # Agent tools (reserved)
-scripts/
-  refresh_official_docs.py      # Official docs refresh CLI
-  run_rag_eval.py               # RAG evaluation CLI
-tests/                          # Pytest test suite
-data/
-  raw/                          # Curated KB documents
-  official_docs/                # Official documentation summaries
-  eval/                         # Retrieval evaluation cases
-  meta/                         # KB metadata (index)
-  chroma/                       # Chroma vector store (gitignored)
-  memory/                       # SQLite databases (gitignored)
+
+### Quiz Evaluation Graph
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	evaluate_answers(evaluate_answers)
+	extract_weak_areas(extract_weak_areas)
+	create_memory_candidate(create_memory_candidate)
+	return_results(return_results)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> evaluate_answers;
+	evaluate_answers --> extract_weak_areas;
+	extract_weak_areas --> create_memory_candidate;
+	create_memory_candidate --> return_results;
+	return_results --> __end__;
+	classDef default fill:#f8fafc,color:#111827,stroke:#94a3b8,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#0f172a,color:#fff
+
 ```
+
+These workflows demonstrate:
+
+- Agentic RAG retrieval loops
+- Memory-aware generation
+- Adaptive prompt conditioning from user feedback
+- Quality validation stages
+- Conditional routing and refinement paths
+- Persistent learning signals and workflow observability
+
+## Architecture Overview
+
+The system is organized around multiple LangGraph workflows.
+
+## Learn Workflow
+
+![App preview](docs/app_learn.png)
+
+The Learn workflow:
+- retrieves contextual knowledge through RAG
+- generates adaptive learning material
+- persists long-term study progress
+- stores completed learning sessions
+- enriches responses with external documentation
+
+Workflow stages:
+1. topic/context loading
+2. retrieval and RAG enrichment
+3. learning content generation
+4. memory persistence
+5. workflow trace rendering
+
+## Quiz Workflow
+
+![App preview](docs/app_quiz.png)
+
+The Quiz workflow:
+- generates AI quizzes dynamically
+- evaluates user answers
+- extracts weak areas
+- suggests future study topics
+- stores learning signals in memory
+
+Workflow stages:
+1. topic loading
+2. memory loading
+3. quiz generation
+4. answer evaluation
+5. weak-area extraction
+6. memory persistence
+7. workflow trace rendering
 
 ---
 
-*Built as an AI Engineering learning project focused on reviewable, traceable agent workflows.*
+# Features
+
+![App preview](docs/app_progress.png)
+
+The feature set is organized to mirror the official Sprint 3 task requirements: core requirements, optional tasks by difficulty, and additional engineering improvements implemented beyond the rubric.
+
+## Core Requirements
+
+| Official Requirement | Implementation |
+|---|---|
+| Agent Purpose | AI Engineering Learning Assistant focused on guided Learn → Quiz → Feedback → Memory workflows. |
+| Clear problem definition | Solves fragmented AI Engineering learning by combining study guides, quizzes, feedback, memory, and progress tracking. |
+| Target users | AI Engineering students and developers learning agents, LangGraph, RAG, memory, tool calling, and evaluation workflows. |
+| Core functionality | Multi-page learning app with Learn, Quiz, Progress, Dashboard, and Help Assistant pages. |
+| Main agent workflow | LangGraph-based Learn and Quiz workflows with state management, memory loading, retrieval, generation, validation, and evaluation. |
+| User interactions | Topic selection, learning-depth selection, quiz answering, feedback submission, memory saving, cache bypassing, progress deletion, and dashboard inspection. |
+| User interface | Streamlit UI with learner-facing Progress page and technical Dashboard page. |
+| Technical implementation | LangGraph, LangChain, OpenAI, ChromaDB, SQLite, Pydantic, Loguru, RAGAs, LangSmith support, and pytest. |
+| Error handling | Validation, fallbacks, retry helpers, cache guards, defensive UI rendering, and safe persistence operations. |
+| Documentation | Setup instructions, architecture explanation, workflow diagrams, project structure, feature mapping, and example user flows. |
+| Examples of common use cases | Learn flow, Quiz flow, feedback loop, progress tracking, dashboard inspection, and Help Assistant usage. |
+| Technical decisions explained | README explains why LangGraph, Agentic RAG, SQLite memory, Streamlit, ChromaDB, and evaluation tooling were used. |
+
+## Optional Tasks — Easy
+
+| Official Optional Task | Implementation |
+|---|---|
+| Ask ChatGPT to critique usability, security, and prompt engineering | AI-assisted review was used throughout development to improve usability, prompt structure, memory UX, dashboard clarity, security assumptions, and reviewer-facing transparency. |
+| Give the agent a personality | Help Assistant supports multiple response styles/personalities and configurable assistant behavior. |
+| Add OpenAI settings controls | Help Assistant exposes configurable generation settings, including preset styles and custom parameter controls. |
+| Add an interactive help feature or chatbot guide | Dedicated Help Assistant page provides in-app guidance, AI Engineering explanations, and workflow support. |
+
+## Optional Tasks — Medium
+
+| Official Optional Task | Implementation |
+|---|---|
+| Calculate and display token usage and costs | Dashboard tracks token usage, session cost, and model/runtime usage signals. |
+| Add retry logic for agents | Retry-safe service helpers and defensive workflow paths reduce transient LLM/API failure risk. |
+| Implement long-term or short-term memory | SQLite-backed long-term memory stores completed Learn sessions, quiz performance, weak areas, feedback, and learning signals. |
+| Implement one more function tool that calls an external API | External documentation updater and live official documentation enrichment connect the app to trusted external technical sources. |
+| Add user personalization | Memory and feedback signals influence future Learn and Quiz generations at the workflow/prompt level. |
+| Implement a caching mechanism | Learn and Quiz workflows use persistent cache behavior, with explicit cache-bypass controls for fresh generation. |
+| Implement a feedback loop | Feedback ratings/comments are persisted, summarized into learning signals, and injected into future generation prompts. |
+| Implement extra function tools and UI controls | Multiple configurable agent capabilities are exposed through the UI, including Help Assistant personalities, custom OpenAI parameters, Learn cache bypass, Quiz cache bypass, memory save/delete controls, feedback controls, and external-document update controls. |
+
+## Optional Tasks — Hard
+
+| Official Optional Task | Implementation |
+|---|---|
+| Agentic RAG | Learn workflow implements Agentic RAG with retrieval, source-quality assessment, conditional query refinement, generation, quality checks, and source-aware output. |
+| Add LLM observability tooling | LangSmith support, internal workflow traces, dashboard diagnostics, and token/cost visibility provide observability. |
+| Create an agent that learns from user feedback | Feedback is persisted, summarized into `simplify` / `increase_difficulty` learning signals, and used to condition future Learn and Quiz generations when fresh generation runs. |
+| Integrate external data sources | Official documentation snapshots, external docs updater, live official-doc enrichment, and Chroma indexing extend the local knowledge base. |
+
+## Extra Features Beyond the Official Rubric
+
+| Extra Feature | Implementation |
+|---|---|
+| RAGAs evaluation | RAGAs evaluation workflow, saved report, tests, and Dashboard visibility for retrieval-quality validation. |
+| Custom RAG evaluation | Additional retrieval validation and custom RAG evaluation utilities under `src/eval/`. |
+| Live official documentation enrichment | Help Assistant and documentation pipelines can use approved official sources for fresher technical grounding. |
+| External Docs / API Updater | Dashboard-accessible updater refreshes official documentation snapshots used by retrieval. |
+| Help Assistant page | Dedicated assistant for project guidance, AI Engineering explanations, workflow help, source provenance, personalities, and runtime controls. |
+| Agentic workflow diagrams | Mermaid diagrams for Learn, Quiz Generation, and Quiz Evaluation workflows document the LangGraph structure. |
+| Workflow trace panels | Learn and Quiz expose execution traces so reviewer/users can inspect graph behavior. |
+| Raw trace/debug visibility | Dashboard and result panels show raw workflow trace information for debugging and review. |
+| Memory transparency | Learn, Progress, and Dashboard expose what memory exists and how it affects personalization. |
+| Learner-facing Progress page | Completed Learn sessions, Quiz Performance, Recent Feedback, and Feedback Summary are separated into user-readable sections. |
+| Technical Dashboard page | Review-oriented dashboard shows workflow readiness, learning signals, cost tracking, KB health, RAGAs state, and observability state. |
+| Weak-area extraction | Quiz evaluation extracts concise weak-area labels instead of repeating full missed questions. |
+| Suggested study topics | Quiz weak areas are mapped to relevant Learn topics and paths. |
+| Answer review UX | Quiz review shows correct/incorrect answer cues with Streamlit success/error states. |
+| Quiz cache bypass | User can force fresh quiz generation to avoid stale cached questions. |
+| Learn cache bypass | User can regenerate Learn content instead of using cached output. |
+| Persistent completed-session controls | Learn sessions can be marked as studied and removed from Progress for debugging/review. |
+| Persistent feedback controls | Feedback is stored, displayed, summarized, and deletable from Progress. |
+| Quiz performance cleanup | Quiz performance records can be deleted through guarded Progress controls. |
+| Source-aware study guides | Learn output exposes sources and grounding information from retrieved documents. |
+| Knowledge-base health dashboard | Dashboard shows Chroma/index status and rebuild/readiness information. |
+| Official docs Chroma collection | Official documentation snapshots are indexed separately from curated local learning material. |
+| Token and cost accounting | Cost tracking is displayed in Dashboard and updated when fresh LLM calls run. |
+| LangSmith configuration support | Observability settings can enable external tracing when credentials are provided. |
+| Structured schemas | Pydantic models are used for typed workflow outputs, settings, and validation boundaries. |
+| Structured logging | Loguru-based logging supports debugging and operational visibility. |
+| Extensive regression tests | The project includes a large pytest suite covering graphs, memory, UI helpers, RAG, RAGAs, official docs, dashboard behavior, caching, and feedback. |
+| Reviewer-friendly demo design | The app separates learner-facing UX from technical observability to make review walkthroughs easier. |
+
+# Evaluation and Observability
+
+![App preview](docs/app_observability.png)
+
+## LangSmith Integration
+
+The project includes LangSmith observability for:
+- workflow tracing
+- runtime visibility
+- debugging support
+- agent execution inspection
+
+## RAGAs Evaluation
+
+![App preview](docs/app_ragas.png)
+
+The app includes RAGAs-based evaluation utilities for:
+- retrieval relevance
+- retrieval precision
+- answer faithfulness
+- contextual grounding
+
+## Dashboard Evaluation Visibility
+
+![App preview](docs/app_learning_signals.png)
+
+The dashboard surfaces:
+- workflow readiness
+- learning signals
+- evaluation summaries
+- reviewer-visible traces
+- retrieval transparency
+
+---
+
+# Security and Reliability
+
+![App preview](docs/app_security.png)
+
+The project includes:
+- environment-based API key management
+- structured error handling
+- retry logic
+- defensive workflow validation
+- safe fallback behavior
+- persistent memory isolation
+- cache bypass support for debugging
+
+---
+
+# Example Workflow
+
+## Learn Flow
+
+1. User selects a learning topic.
+2. LangGraph Learn workflow starts.
+3. Relevant knowledge is retrieved through RAG.
+4. AI generates contextual study material.
+5. Progress is persisted into long-term memory.
+6. Dashboard updates learning signals.
+
+## Quiz Flow
+
+1. User generates a quiz.
+2. LangGraph Quiz workflow creates questions.
+3. User submits answers.
+4. AI evaluates results.
+5. Weak areas are extracted.
+6. Suggested study topics are generated.
+7. Results are stored in learning memory.
+8. Dashboard updates personalization signals.
+
+---
+
+# Reflection and Future Improvements
+
+Potential future improvements include:
+- multi-user authentication
+- cloud deployment
+- collaborative multi-agent workflows
+- advanced personalization strategies
+- voice interaction
+- real-time adaptive curriculum generation
+- stronger retrieval benchmarking
+- local LLM support
+- agent-to-agent collaboration
+
+---
+
+# Why LangGraph Was Used
+
+LangGraph was chosen because the project required:
+- stateful workflows
+- branching execution paths
+- persistent memory integration
+- workflow transparency
+- inspectable agent execution
+- deterministic orchestration
+
+Compared to a simple chain-based architecture, LangGraph made it possible to:
+- separate Learn and Quiz workflows
+- expose reviewer-visible execution traces
+- persist memory across workflows
+- support adaptive learning flows
+
+---
+
+# Key Learning Outcomes
+
+This project demonstrates:
+- understanding of AI agent architectures
+- practical LangGraph workflow orchestration
+- implementation of Agentic RAG systems
+- long-term memory integration
+- observability and evaluation workflows
+- structured software engineering practices
+- production-style project organization
+
+---
+
+# Final Notes
+
+This project intentionally combines:
+- AI agents
+- retrieval systems
+- evaluation workflows
+- memory systems
+- observability
+- educational UX
+
+into a single integrated learning platform.
+
+The goal was not only to build a functional educational assistant, but also to demonstrate:
+- agent orchestration
+- workflow transparency
+- persistent memory handling
+- retrieval evaluation
+- scalable project organization
+
+in a production-style AI Engineering application.
+
