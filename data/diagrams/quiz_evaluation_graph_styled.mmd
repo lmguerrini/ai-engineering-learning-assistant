@@ -1,0 +1,20 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	evaluate_answers(evaluate_answers)
+	extract_weak_areas(extract_weak_areas)
+	create_memory_candidate(create_memory_candidate)
+	return_results(return_results)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> evaluate_answers;
+	evaluate_answers --> extract_weak_areas;
+	extract_weak_areas --> create_memory_candidate;
+	create_memory_candidate --> return_results;
+	return_results --> __end__;
+	classDef default fill:#f8fafc,color:#111827,stroke:#94a3b8,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#0f172a,color:#fff
