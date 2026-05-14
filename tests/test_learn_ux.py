@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 
-from src.schemas import ResponseStyle, DifficultyLevel, Source, StudyGuide
+from src.schemas import ResponseStyle, DifficultyLevel, QuizResult, Source, StudyGuide
 from src.ui.display_helpers import (
     _sanitize_snippet,
     _skip_to_sentence_start,
@@ -548,6 +548,21 @@ class TestMemoryEmptyState:
         info = format_memory_transparency(profile)
         assert info["loaded"] is True
 
+    def test_profile_uses_recent_weak_areas_when_recurring_areas_are_empty(self):
+        profile = {
+            "recent_weak_areas": ["Contextual relevance in RAG"],
+            "recurring_weak_areas": [],
+            "suggested_focus_topics": [
+                "Agentic RAG",
+                "Building Applications with LangChain, RAGs, and Streamlit",
+                "AI Agents",
+            ],
+        }
+        info = format_memory_transparency(profile)
+        assert info["loaded"] is True
+        assert info["weak_areas"] == ["Contextual relevance in RAG"]
+        assert "Agentic RAG" in info["suggested_focus"]
+
     def test_profile_with_feedback_summary_only_is_loaded(self):
         profile = {
             "feedback_summary": {
@@ -653,6 +668,33 @@ class TestTraceLabels:
         labels = [f["label"] for f in fields]
         assert "Learning Depth" in labels
         assert "Response Style" not in labels
+
+    @patch("src.memory.feedback_service.get_feedback_summary")
+    @patch("src.memory.memory_service.get_completed_learn_sessions")
+    @patch("src.memory.memory_service.get_user_profile_summary")
+    def test_trace_uses_live_persisted_memory_when_result_profile_is_empty(
+        self,
+        mock_get_profile,
+        mock_get_completed,
+        mock_get_feedback,
+    ):
+        mock_get_profile.return_value = {
+            "recent_topics": ["AI Agents"],
+            "recurring_weak_areas": ["Tool calling"],
+            "average_score": 75.0,
+            "preferred_style": None,
+            "suggested_focus_topics": ["Tool Calling"],
+        }
+        mock_get_completed.return_value = []
+        mock_get_feedback.return_value = {
+            "average_rating": None,
+            "total_count": 0,
+            "suggestion": None,
+        }
+
+        fields = format_graph_state_summary({"retrieved_docs": [], "memory_profile": {}})
+        memory_field = next(field for field in fields if field["label"] == "Memory Profile")
+        assert memory_field["value"] == "Loaded"
 
 
 class TestOfficialDocsTraceFormat:
@@ -1428,6 +1470,73 @@ class TestQuizUiCopy:
             source = f.read()
         assert "Using context from your last Learn session." in source
 
+    def test_quiz_page_exposes_cache_bypass_checkbox(self):
+        with open("src/ui/quiz_page.py") as f:
+            source = f.read()
+        assert '"Regenerate quiz (bypass cache)"' in source
+        assert 'force_regenerate=regenerate_quiz' in source
+
+
+class TestQuizResultRendering:
+    """Quiz result rendering should show correct counts and answer review cues."""
+
+    @patch("src.ui.quiz_page.st")
+    def test_quiz_results_use_quiz_result_counts_not_zero_defaults(self, mock_st):
+        from src.ui.quiz_page import _display_quiz_results
+
+        _display_quiz_results(
+            {
+                "score": 66.7,
+                "quiz_result": QuizResult(
+                    topic="AI Agents",
+                    total_questions=3,
+                    correct_count=2,
+                    score_percent=66.7,
+                ),
+            }
+        )
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list]
+        assert "### Score: 67% (2/3)" in markdown_calls
+
+    @patch("src.ui.quiz_page.st")
+    def test_quiz_results_render_answer_review_with_icons_and_correct_answer(self, mock_st):
+        from src.ui.quiz_page import _display_quiz_results
+
+        _display_quiz_results(
+            {
+                "score": 50.0,
+                "correct_count": 1,
+                "total_questions": 2,
+                "per_question_feedback": [
+                    {
+                        "question_number": 1,
+                        "question": "What does tool calling enable?",
+                        "selected_answer": "A) Structured tool use",
+                        "correct_answer": "A) Structured tool use",
+                        "correct": True,
+                        "explanation": "It lets the model request structured tool execution.",
+                    },
+                    {
+                        "question_number": 2,
+                        "question": "Which benefit of agentic RAG most improves contextual relevance?",
+                        "selected_answer": "B) More UI buttons",
+                        "correct_answer": "C) Adaptive retrieval decisions",
+                        "correct": False,
+                        "explanation": "Adaptive retrieval can improve relevance.",
+                    },
+                ],
+            }
+        )
+
+        markdown_calls = [call.args[0] for call in mock_st.markdown.call_args_list]
+        assert "### Answer Review" in markdown_calls
+        assert "**Q1. ✅** What does tool calling enable?" in markdown_calls
+        assert "**Q2. ❌** Which benefit of agentic RAG most improves contextual relevance?" in markdown_calls
+        mock_st.success.assert_any_call("Selected answer: A) Structured tool use")
+        mock_st.error.assert_any_call("Selected answer: B) More UI buttons")
+        mock_st.success.assert_any_call("Correct answer: C) Adaptive retrieval decisions")
+
 
 class TestSidebarStatus:
     """Sidebar should show compact status info."""
@@ -1976,6 +2085,13 @@ class TestDashboardStructure:
         assert 'top_cols[0].metric(' in source
         assert 'signal_cols[0].metric(' in source
 
+    def test_dashboard_learning_signals_uses_memory_weak_areas_and_suggested_focus(self):
+        with open("src/ui/dashboard_page.py") as f:
+            source = f.read()
+        assert "weak = \", \".join(mem.get(\"weak_areas\", [])) or \"—\"" in source
+        assert "focus = \", \".join(mem.get(\"suggested_focus\", [])) or \"—\"" in source
+        assert "_humanize_feedback_suggestion_label(fb_summary.get(\"suggestion\"))" in source
+
     def test_dashboard_has_latest_run_context_for_cost_tracking(self):
         with open("src/ui/dashboard_page.py") as f:
             source = f.read()
@@ -2058,6 +2174,14 @@ class TestDashboardStructure:
         assert '"Mark as Not Completed"' in source
         assert '"Quiz Performance"' in source
         assert "with st.container(border=True):" in source
+
+    def test_progress_page_quiz_performance_contains_delete_button(self):
+        with open("src/ui/progress_page.py") as f:
+            source = f.read()
+        quiz_block = source[source.index('st.subheader("Quiz Performance")'):]
+        quiz_block = quiz_block[:quiz_block.index('st.subheader("Recent Feedback")')]
+        assert '"🗑️ Delete"' in quiz_block
+        assert 'delete_learning_event(int(evt["id"]), source=QUIZ_EVALUATION_SOURCE)' in quiz_block
 
     def test_progress_page_uses_native_feedback_layout_helpers(self):
         from src.ui.progress_page import _format_feedback_entry_display, _format_learning_event_display

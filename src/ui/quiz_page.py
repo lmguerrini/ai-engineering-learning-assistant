@@ -30,17 +30,37 @@ def _display_quiz_questions(questions: list[QuizQuestion]) -> list[str]:
 
 def _display_quiz_results(result: dict) -> None:
     """Display quiz evaluation results with score and feedback."""
+    quiz_result = result.get("quiz_result")
     score = result.get("score", 0)
-    total = result.get("total_questions", 0)
-    correct = result.get("correct_count", 0)
+    total = result.get("total_questions")
+    correct = result.get("correct_count")
+
+    if quiz_result is not None:
+        if total is None:
+            total = getattr(quiz_result, "total_questions", 0)
+        if correct is None:
+            correct = getattr(quiz_result, "correct_count", 0)
+
+    total = total or 0
+    correct = correct or 0
 
     st.markdown(f"### Score: {score:.0f}% ({correct}/{total})")
 
     per_question = result.get("per_question_feedback", [])
+    if per_question:
+        st.markdown("### Answer Review")
     for fb in per_question:
         is_correct = fb.get("correct", False)
-        icon = "Correct" if is_correct else "Incorrect"
-        st.markdown(f"**Q{fb.get('question_number', '?')}.** {icon}")
+        icon = "✅" if is_correct else "❌"
+        st.markdown(
+            f"**Q{fb.get('question_number', '?')}. {icon}** {fb.get('question', '')}"
+        )
+        selected_answer = fb.get("selected_answer") or "No answer selected"
+        if is_correct:
+            st.success(f"Selected answer: {selected_answer}")
+        else:
+            st.error(f"Selected answer: {selected_answer}")
+            st.success(f"Correct answer: {fb.get('correct_answer', '')}")
         if fb.get("explanation"):
             st.caption(fb["explanation"])
 
@@ -50,7 +70,7 @@ def _display_quiz_results(result: dict) -> None:
         for area in weak:
             st.markdown(f"- {area}")
 
-    next_steps = result.get("next_steps", [])
+    next_steps = result.get("next_steps") or result.get("suggested_next_steps", [])
     if next_steps:
         st.markdown("### Suggested Next Steps")
         for step in next_steps:
@@ -130,6 +150,11 @@ def render_quiz() -> None:
             value=5,
             key="quiz_num_q",
         )
+    regenerate_quiz = st.checkbox(
+        "Regenerate quiz (bypass cache)",
+        value=False,
+        key="quiz_force_regenerate",
+    )
 
     study_context = ""
     last_guide = st.session_state.get("last_study_guide")
@@ -148,6 +173,7 @@ def render_quiz() -> None:
                 difficulty=DifficultyLevel(difficulty),
                 num_questions=num_questions,
                 study_guide_context=study_context,
+                force_regenerate=regenerate_quiz,
             )
 
         error = result.get("error")
