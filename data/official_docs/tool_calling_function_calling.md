@@ -1,7 +1,7 @@
 # Tool Calling & Function Calling
 
 - **Official source**: https://platform.openai.com/docs/guides/function-calling, https://python.langchain.com/docs/concepts/tool_calling/
-- **Last refreshed**: 2026-05-13
+- **Last refreshed**: 2026-05-15
 - **source_type**: official_docs
 - **Versions**: `openai>=1.0`, `langchain-core>=0.2`
 
@@ -225,7 +225,7 @@ Home API Docs Guides and concepts for the OpenAI API API reference Endpoints, pa
 ### https://docs.langchain.com/oss/python/langchain/overview
 
 ```
-Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Open source Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangChain overview Deep Agents LangChain LangGraph Integrations Learn Reference Contribute Python Overview Get started Install Quickstart Changelog Philosophy Core components Agents Models Messages Tools Short-term memory Streaming Structured output Middleware Overview Prebuilt middleware Custom middleware Frontend Overview Patterns Integrations Advanced usage Guardrails Runtime Context engineering Model Context Protocol (MCP) Human-in-the-loop Multi-agent Retrieval Long-term memory Agent development LangSmith Studio Test Agent Chat UI Deploy with LangSmith Deployment Observability On this page Create an agent Core benefits LangChain overview Copy page LangCha...
+Skip to main content Join us May 13th & May 14th at Interrupt, the Agent Conference by LangChain. Buy tickets > Docs by LangChain home page Open source Search... ⌘ K Ask AI GitHub Try LangSmith Try LangSmith Search... Navigation LangChain overview Deep Agents LangChain LangGraph Integrations Learn Reference Contribute Python Overview Get started Install Quickstart Changelog Philosophy Core components Agents Models Messages Tools Short-term memory Event streaming Streaming Structured output Middleware Overview Prebuilt middleware Custom middleware Frontend Overview Patterns Integrations Advanced usage Guardrails Runtime Context engineering Model Context Protocol (MCP) Human-in-the-loop Multi-agent Retrieval Long-term memory Agent development LangSmith Studio Test Agent Chat UI Deploy with LangSmith Deployment Observability On this page Create an agent Core benefits LangChain overview C...
 ```
 
 *Run Rebuild KB Index in the Dashboard to make refreshed docs available to retrieval.*

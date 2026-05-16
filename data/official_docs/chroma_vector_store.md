@@ -1,7 +1,7 @@
 # Chroma Vector Store
 
 - **Official source**: https://docs.trychroma.com/
-- **Last refreshed**: 2026-05-13
+- **Last refreshed**: 2026-05-15
 - **source_type**: official_docs
 - **Versions**: `chromadb>=0.5`
 
