@@ -10,9 +10,9 @@ The application combines:
 - Agentic RAG with ChromaDB
 - observability and evaluation workflows
 - external documentation enrichment
-- reviewer-visible workflow traces and analytics
+- inspectable workflow traces and analytics
 
-The project was built as the final project for the AI Agents Sprint at Turing College.
+This project is designed as an AI-native educational platform for adaptive AI Engineering learning.
 
 ---
 
@@ -82,7 +82,7 @@ This allows the system to remain:
 - inspectable
 - reproducible
 - adaptive
-- reviewer-friendly
+- debug-friendly
 
 ---
 
@@ -144,8 +144,6 @@ This allows the system to remain:
 │   │   ├── help_page.py                    # Help assistant UI
 │   │   ├── display_helpers.py              # Shared UI rendering helpers
 │   │   └── shared.py                       # Shared Streamlit UI utilities
-│   └── demo/
-│       └── review_examples.py              # Demo/review helper examples
 └── tests/
     ├── test_learn_graph.py                 # Learn workflow tests
     ├── test_quiz_graph.py                  # Quiz workflow tests
@@ -371,59 +369,32 @@ Workflow stages:
 
 ![App preview](docs/app_progress.png)
 
-The feature set is organized to mirror the official Sprint 3 task requirements: core requirements, optional tasks by difficulty, and additional engineering improvements implemented beyond the rubric.
+The platform combines learner-facing workflows with developer-facing diagnostics so learning output, memory behavior, retrieval quality, and runtime signals are all inspectable.
 
-## Core Requirements
+## Core Features
 
-| Official Requirement | Implementation |
+| Feature | Implementation |
 |---|---|
-| Agent Purpose | AI Engineering Learning Assistant focused on guided Learn → Quiz → Feedback → Memory workflows. |
-| Clear problem definition | Solves fragmented AI Engineering learning by combining study guides, quizzes, feedback, memory, and progress tracking. |
-| Target users | AI Engineering students and developers learning agents, LangGraph, RAG, memory, tool calling, and evaluation workflows. |
-| Core functionality | Multi-page learning app with Learn, Quiz, Progress, Dashboard, and Help Assistant pages. |
-| Main agent workflow | LangGraph-based Learn and Quiz workflows with state management, memory loading, retrieval, generation, validation, and evaluation. |
-| User interactions | Topic selection, learning-depth selection, quiz answering, feedback submission, memory saving, cache bypassing, progress deletion, and dashboard inspection. |
-| User interface | Streamlit UI with learner-facing Progress page and technical Dashboard page. |
-| Technical implementation | LangGraph, LangChain, OpenAI, ChromaDB, SQLite, Pydantic, Loguru, RAGAs, LangSmith support, and pytest. |
-| Error handling | Validation, fallbacks, retry helpers, cache guards, defensive UI rendering, and safe persistence operations. |
-| Documentation | Setup instructions, architecture explanation, workflow diagrams, project structure, feature mapping, and example user flows. |
-| Examples of common use cases | Learn flow, Quiz flow, feedback loop, progress tracking, dashboard inspection, and Help Assistant usage. |
-| Technical decisions explained | README explains why LangGraph, Agentic RAG, SQLite memory, Streamlit, ChromaDB, and evaluation tooling were used. |
+| Agentic learning workflows | LangGraph-based Learn and Quiz workflows coordinate state management, memory loading, retrieval, generation, validation, evaluation, and result rendering. |
+| Adaptive study-guide generation | Learn mode generates AI Engineering study guides and Learn Path outputs with difficulty, depth, memory, feedback, source, and cache controls. |
+| Quiz generation and evaluation | Quiz mode generates dynamic questions, evaluates submitted answers, extracts weak areas, shows answer feedback, and suggests future study topics. |
+| Agentic RAG | Learn workflow uses retrieval, source-quality assessment, conditional query refinement, generation, quality checks, and source-aware output. |
+| Long-term learning memory | SQLite-backed memory stores completed Learn sessions, quiz performance, weak areas, feedback, and learning signals. |
+| Feedback learning loop | Feedback ratings/comments are persisted, summarized into `simplify` / `increase_difficulty` signals, and used to condition future Learn and Quiz generations when fresh generation runs. |
+| Personalization | Memory and feedback signals influence future generation at the workflow and prompt level. |
+| Help Assistant | Dedicated assistant supports app guidance, AI Engineering explanations, source provenance, session chat memory, domain guardrails, and approved live official-doc enrichment. |
+| Personality and runtime controls | Help Assistant supports personality presets plus configurable OpenAI runtime parameters. |
+| Token and cost tracking | Dashboard tracks token usage, session cost, model usage, and runtime signals when fresh LLM calls run. |
+| Retry and caching | Retry-safe helpers, fallback paths, persistent workflow cache behavior, and explicit cache-bypass controls reduce transient failure impact and stale-output risk. |
+| External documentation enrichment | Official documentation snapshots, external docs updater, live official-doc enrichment, and Chroma indexing extend the local knowledge base. |
+| Observability support | LangSmith configuration support, internal workflow traces, dashboard diagnostics, and token/cost visibility expose runtime behavior. |
+| Security and error handling | Environment-based API key management, validation, fallbacks, defensive UI rendering, cache guards, and safe persistence operations are built into the app. |
+| Documentation and common workflows | README covers setup, architecture, workflow diagrams, project structure, feature mapping, technical decisions, and Learn/Quiz usage flows. |
+| AI-assisted UX and prompt critique | Iterative AI-assisted critique was used to improve usability, prompt structure, memory UX, dashboard clarity, and security assumptions. |
 
-## Optional Tasks — Easy
+## Extra Features
 
-| Official Optional Task | Implementation |
-|---|---|
-| Ask ChatGPT to critique usability, security, and prompt engineering | AI-assisted review was used throughout development to improve usability, prompt structure, memory UX, dashboard clarity, security assumptions, and reviewer-facing transparency. |
-| Give the agent a personality | Help Assistant supports multiple response styles/personalities and configurable assistant behavior. |
-| Add OpenAI settings controls | Help Assistant exposes configurable generation settings, including preset styles and custom parameter controls. |
-| Add an interactive help feature or chatbot guide | Dedicated Help Assistant page provides in-app guidance, AI Engineering explanations, and workflow support. |
-
-## Optional Tasks — Medium
-
-| Official Optional Task | Implementation |
-|---|---|
-| Calculate and display token usage and costs | Dashboard tracks token usage, session cost, and model/runtime usage signals. |
-| Add retry logic for agents | Retry-safe service helpers and defensive workflow paths reduce transient LLM/API failure risk. |
-| Implement long-term or short-term memory | SQLite-backed long-term memory stores completed Learn sessions, quiz performance, weak areas, feedback, and learning signals. |
-| Implement one more function tool that calls an external API | External documentation updater and live official documentation enrichment connect the app to trusted external technical sources. |
-| Add user personalization | Memory and feedback signals influence future Learn and Quiz generations at the workflow/prompt level. |
-| Implement a caching mechanism | Learn and Quiz workflows use persistent cache behavior, with explicit cache-bypass controls for fresh generation. |
-| Implement a feedback loop | Feedback ratings/comments are persisted, summarized into learning signals, and injected into future generation prompts. |
-| Implement extra function tools and UI controls | Multiple configurable agent capabilities are exposed through the UI, including Help Assistant personalities, custom OpenAI parameters, Learn cache bypass, Quiz cache bypass, memory save/delete controls, feedback controls, and external-document update controls. |
-
-## Optional Tasks — Hard
-
-| Official Optional Task | Implementation |
-|---|---|
-| Agentic RAG | Learn workflow implements Agentic RAG with retrieval, source-quality assessment, conditional query refinement, generation, quality checks, and source-aware output. |
-| Add LLM observability tooling | LangSmith support, internal workflow traces, dashboard diagnostics, and token/cost visibility provide observability. |
-| Create an agent that learns from user feedback | Feedback is persisted, summarized into `simplify` / `increase_difficulty` learning signals, and used to condition future Learn and Quiz generations when fresh generation runs. |
-| Integrate external data sources | Official documentation snapshots, external docs updater, live official-doc enrichment, and Chroma indexing extend the local knowledge base. |
-
-## Extra Features Beyond the Official Rubric
-
-| Extra Feature | Implementation |
+| Feature | Implementation |
 |---|---|
 | RAGAs evaluation | RAGAs evaluation workflow, saved report, tests, and Dashboard visibility for retrieval-quality validation. |
 | Custom RAG evaluation | Additional retrieval validation and custom RAG evaluation utilities under `src/eval/`. |
@@ -431,17 +402,17 @@ The feature set is organized to mirror the official Sprint 3 task requirements: 
 | External Docs / API Updater | Dashboard-accessible updater refreshes official documentation snapshots used by retrieval. |
 | Help Assistant page | Dedicated assistant for project guidance, AI Engineering explanations, workflow help, source provenance, personalities, and runtime controls. |
 | Agentic workflow diagrams | Mermaid diagrams for Learn, Quiz Generation, and Quiz Evaluation workflows document the LangGraph structure. |
-| Workflow trace panels | Learn and Quiz expose execution traces so reviewer/users can inspect graph behavior. |
-| Raw trace/debug visibility | Dashboard and result panels show raw workflow trace information for debugging and review. |
+| Workflow trace panels | Learn and Quiz expose execution traces so users can inspect graph behavior. |
+| Raw trace/debug visibility | Dashboard and result panels show raw workflow trace information for debugging and inspection. |
 | Memory transparency | Learn, Progress, and Dashboard expose what memory exists and how it affects personalization. |
 | Learner-facing Progress page | Completed Learn sessions, Quiz Performance, Recent Feedback, and Feedback Summary are separated into user-readable sections. |
-| Technical Dashboard page | Review-oriented dashboard shows workflow readiness, learning signals, cost tracking, KB health, RAGAs state, and observability state. |
+| Technical Dashboard page | Dashboard shows workflow readiness, learning signals, cost tracking, KB health, RAGAs state, and observability state. |
 | Weak-area extraction | Quiz evaluation extracts concise weak-area labels instead of repeating full missed questions. |
 | Suggested study topics | Quiz weak areas are mapped to relevant Learn topics and paths. |
-| Answer review UX | Quiz review shows correct/incorrect answer cues with Streamlit success/error states. |
+| Answer feedback UX | Quiz results show correct/incorrect answer cues with Streamlit success/error states. |
 | Quiz cache bypass | User can force fresh quiz generation to avoid stale cached questions. |
 | Learn cache bypass | User can regenerate Learn content instead of using cached output. |
-| Persistent completed-session controls | Learn sessions can be marked as studied and removed from Progress for debugging/review. |
+| Persistent completed-session controls | Learn sessions can be marked as studied and removed from Progress for cleanup and correction. |
 | Persistent feedback controls | Feedback is stored, displayed, summarized, and deletable from Progress. |
 | Quiz performance cleanup | Quiz performance records can be deleted through guarded Progress controls. |
 | Source-aware study guides | Learn output exposes sources and grounding information from retrieved documents. |
@@ -452,7 +423,7 @@ The feature set is organized to mirror the official Sprint 3 task requirements: 
 | Structured schemas | Pydantic models are used for typed workflow outputs, settings, and validation boundaries. |
 | Structured logging | Loguru-based logging supports debugging and operational visibility. |
 | Extensive regression tests | The project includes a large pytest suite covering graphs, memory, UI helpers, RAG, RAGAs, official docs, dashboard behavior, caching, and feedback. |
-| Reviewer-friendly demo design | The app separates learner-facing UX from technical observability to make review walkthroughs easier. |
+| Developer-friendly walkthrough design | The app separates learner-facing UX from technical observability to make architecture and runtime behavior easier to inspect. |
 
 # Evaluation and Observability
 
@@ -484,7 +455,7 @@ The dashboard surfaces:
 - workflow readiness
 - learning signals
 - evaluation summaries
-- reviewer-visible traces
+- developer-visible traces
 - retrieval transparency
 
 ---
@@ -555,7 +526,7 @@ LangGraph was chosen because the project required:
 
 Compared to a simple chain-based architecture, LangGraph made it possible to:
 - separate Learn and Quiz workflows
-- expose reviewer-visible execution traces
+- expose developer-visible execution traces
 - persist memory across workflows
 - support adaptive learning flows
 
@@ -594,4 +565,3 @@ The goal was not only to build a functional educational assistant, but also to d
 - scalable project organization
 
 in a production-style AI Engineering application.
-
